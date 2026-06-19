@@ -24,7 +24,7 @@ const {
 } = CONFIG;
 
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
-const PORT_NUM = PORT || 3000;
+const PORT_NUM = process.env.PORT || PORT || 3000;
 
 // ============ Zoho sync ============
 let accessToken = null;

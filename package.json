@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "server": "node server.cjs",
     "prices": "node build-prices.cjs",
-    "start": "node server.cjs"
+    "start": "node server.cjs",
+    "build:start": "vite build && node server.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",
