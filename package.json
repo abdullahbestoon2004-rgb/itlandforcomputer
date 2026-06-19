@@ -1,0 +1,23 @@
+{
+  "name": "itland-wholesale-portal",
+  "version": "1.0.0",
+  "description": "Trilingual login-protected wholesale catalog (React) wired to Zoho Books",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server.cjs",
+    "prices": "node build-prices.cjs",
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2",
+    "exceljs": "^4.4.0"
+  }
+}

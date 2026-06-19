@@ -1,0 +1,7 @@
+node_modules/
+dist/
+items-cache.json
+wholesale-prices.json
+
+# NEVER commit your secrets:
+config.json
