@@ -14,17 +14,22 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-// ----- load config -----
-const CONFIG = require("./config.json");
-const {
-  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_ORG_ID, ZOHO_REFRESH_TOKEN,
-  ZOHO_ACCOUNTS_DOMAIN, ZOHO_API_DOMAIN,
-  CLIENTS, SYNC_INTERVAL_MINUTES, PORT,
-  WHOLESALE_FIELD,
-} = CONFIG;
+// ----- load config (local file falls back to environment variables) -----
+let CONFIG = {};
+try { CONFIG = require("./config.json"); } catch {}
+
+const ZOHO_CLIENT_ID        = process.env.ZOHO_CLIENT_ID        || CONFIG.ZOHO_CLIENT_ID;
+const ZOHO_CLIENT_SECRET    = process.env.ZOHO_CLIENT_SECRET    || CONFIG.ZOHO_CLIENT_SECRET;
+const ZOHO_ORG_ID           = process.env.ZOHO_ORG_ID           || CONFIG.ZOHO_ORG_ID;
+const ZOHO_REFRESH_TOKEN    = process.env.ZOHO_REFRESH_TOKEN    || CONFIG.ZOHO_REFRESH_TOKEN;
+const ZOHO_ACCOUNTS_DOMAIN  = process.env.ZOHO_ACCOUNTS_DOMAIN  || CONFIG.ZOHO_ACCOUNTS_DOMAIN;
+const ZOHO_API_DOMAIN       = process.env.ZOHO_API_DOMAIN       || CONFIG.ZOHO_API_DOMAIN;
+const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLESALE_FIELD;
+const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
+const CLIENTS = CONFIG.CLIENTS || JSON.parse(process.env.CLIENTS || "[]");
 
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
-const PORT_NUM = process.env.PORT || PORT || 3000;
+const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
 
 // ============ Zoho sync ============
 let accessToken = null;
