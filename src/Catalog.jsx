@@ -18,9 +18,9 @@ export default function Catalog({
   const all = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter(it => {
-      if (brand && extractBrand(it.n) !== brand) return false;
+      if (brand && extractBrand(it.n).toLowerCase() !== brand.toLowerCase()) return false;
       if (inStockOnly && !it.k) return false;
-      if (q && it.n.toLowerCase().indexOf(q) < 0 && (it.s || '').toLowerCase().indexOf(q) < 0) return false;
+      if (q && it.n.toLowerCase().indexOf(q) < 0 && (it.s || '').toLowerCase().indexOf(q) < 0 && (it.barcode || '').toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
   }, [items, query, inStockOnly, brand]);
