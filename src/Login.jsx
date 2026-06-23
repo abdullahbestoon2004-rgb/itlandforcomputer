@@ -9,7 +9,6 @@ export default function Login({ t, user, setUser, pass, setPass, error, loading,
           <div style={{ display:'flex', justifyContent:'center', marginBottom:26 }}>
             <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:52, width:'auto', maxWidth:'100%' }} />
           </div>
-          <div style={{ fontSize:13, fontFamily:"'Space Mono',ui-monospace,monospace", letterSpacing:'.14em', textTransform:'uppercase', color:'var(--acc)', textAlign:'center', marginBottom:6 }}>{t.portalTag}</div>
           <h1 style={{ margin:'0 0 26px', fontSize:23, lineHeight:1.25, fontWeight:800, textAlign:'center' }}>{t.loginTitle}</h1>
 
           <label style={{ display:'block', fontSize:13.5, fontWeight:700, color:'#2B2419', marginBottom:7 }}>{t.username}</label>
