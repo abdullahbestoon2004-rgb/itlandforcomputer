@@ -91,6 +91,11 @@ export default function Catalog({
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(var(--cardmin), 1fr))', gap:16 }}>
               {vis.map(it => (
                 <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
+                  {it.img && (
+                    <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, overflow:'hidden' }}>
+                      <img src={it.img} alt={it.n} style={{ maxHeight:118, maxWidth:'100%', objectFit:'contain' }} />
+                    </div>
+                  )}
                   <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>
                     <span style={{ fontSize:11, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', letterSpacing:'.02em', paddingTop:2 }}>{it.barcode}</span>
                     <StockBadge inStock={it.k} t={t} />

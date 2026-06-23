@@ -22,6 +22,11 @@ export default function Detail({ t, item, onBack }) {
         <div style={{ background:'#fff', border:'2px solid #17130E', borderRadius:22, boxShadow:'6px 6px 0 #17130E', overflow:'hidden' }}>
           <div style={{ height:8, background:'var(--pri)' }} />
           <div style={{ padding:'30px 30px 34px' }}>
+            {item.img && (
+              <div style={{ display:'flex', justifyContent:'center', alignItems:'center', background:'#F9F5EE', borderRadius:14, padding:'24px', marginBottom:28, minHeight:220 }}>
+                <img src={item.img} alt={item.n} style={{ maxHeight:260, maxWidth:'100%', objectFit:'contain' }} />
+              </div>
+            )}
             <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:10, marginBottom:16 }}>
               <StockBadge inStock={item.k} t={t} />
             </div>

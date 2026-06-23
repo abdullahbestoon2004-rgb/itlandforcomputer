@@ -31,6 +31,33 @@ const CLIENTS = CONFIG.CLIENTS || JSON.parse(process.env.CLIENTS || "[]");
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
 const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
 
+// ============ image matching ============
+const IMAGE_DIR = path.join(__dirname, "public", "assets", "product_images");
+let imageFiles = [];
+try { imageFiles = fs.readdirSync(IMAGE_DIR); } catch {}
+
+function findImage(name) {
+  if (!name || imageFiles.length === 0) return null;
+  const words = new Set(name.toLowerCase().replace(/[^a-z0-9]/g, " ").split(/\s+/).filter(t => t.length > 0));
+  let best = null, bestScore = 0;
+  for (const file of imageFiles) {
+    const tokens = file.replace(/\.[^.]+$/, "").split(/[_\-]/).map(t => t.toLowerCase()).filter(t => t.length > 1);
+    const matched = tokens.filter(t => words.has(t)).length;
+    if (matched === tokens.length && matched > bestScore) { bestScore = matched; best = file; }
+  }
+  return best ? `/assets/product_images/${best}` : null;
+}
+
+let _enrichedItems = null, _enrichedAt = 0;
+function getItems() {
+  const cache = getCache();
+  if (!_enrichedItems || _enrichedAt !== cache.updatedAt) {
+    _enrichedItems = cache.items.map(it => ({ ...it, img: findImage(it.n) }));
+    _enrichedAt = cache.updatedAt;
+  }
+  return { updatedAt: cache.updatedAt, items: _enrichedItems };
+}
+
 // ============ Zoho sync ============
 let accessToken = null;
 let tokenExpiry = 0;
@@ -234,8 +261,8 @@ const server = http.createServer(async (req, res) => {
   if (pathn === "/api/items") {
     const s = getSession(req);
     if (!s) { send(res, 401, { error: "unauthorized" }); return; }
-    const cache = getCache();
-    send(res, 200, { updatedAt: cache.updatedAt, items: cache.items });
+    const data = getItems();
+    send(res, 200, { updatedAt: data.updatedAt, items: data.items });
     return;
   }
 
