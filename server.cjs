@@ -27,6 +27,8 @@ const ZOHO_API_DOMAIN       = process.env.ZOHO_API_DOMAIN       || CONFIG.ZOHO_A
 const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLESALE_FIELD;
 const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
 const CLIENTS = CONFIG.CLIENTS || JSON.parse(process.env.CLIENTS || "[]");
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD || "";
 
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
 const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
@@ -48,14 +50,26 @@ function findImage(name) {
   return best ? `/assets/product_images/${best}` : null;
 }
 
-let _enrichedItems = null, _enrichedAt = 0;
+const OVERRIDES_FILE = path.join(__dirname, "overrides.json");
+function loadOverrides() {
+  if (!fs.existsSync(OVERRIDES_FILE)) return {};
+  try { return JSON.parse(fs.readFileSync(OVERRIDES_FILE, "utf8")); } catch { return {}; }
+}
+function saveOverrides(o) { fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(o, null, 2)); }
+
 function getItems() {
   const cache = getCache();
-  if (!_enrichedItems || _enrichedAt !== cache.updatedAt) {
-    _enrichedItems = cache.items.map(it => ({ ...it, img: findImage(it.n) }));
-    _enrichedAt = cache.updatedAt;
-  }
-  return { updatedAt: cache.updatedAt, items: _enrichedItems };
+  const ov = loadOverrides();
+  const items = cache.items.map(it => {
+    const o = ov[it.id] || {};
+    return {
+      ...it,
+      n:   o.n   !== undefined ? o.n   : it.n,
+      p:   o.p   !== undefined ? o.p   : it.p,
+      img: o.img !== undefined ? o.img : findImage(it.n),
+    };
+  });
+  return { updatedAt: cache.updatedAt, items };
 }
 
 // ============ Zoho sync ============
@@ -197,6 +211,18 @@ function getSession(req) {
   return s;
 }
 
+// ============ admin session auth ============
+const adminSessions = new Map();
+
+function getAdminSession(req) {
+  const cookie = req.headers.cookie || "";
+  const m = cookie.match(/adminsession=([a-f0-9]+)/);
+  if (!m) return null;
+  const s = adminSessions.get(m[1]);
+  if (!s || Date.now() > s.exp) { if (s) adminSessions.delete(m[1]); return null; }
+  return s;
+}
+
 // ============ HTTP server ============
 function send(res, code, body, headers = {}) {
   res.writeHead(code, Object.assign({ "Content-Type": "application/json" }, headers));
@@ -206,7 +232,8 @@ function send(res, code, body, headers = {}) {
 function serveStatic(res, filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const types = { ".html":"text/html", ".js":"text/javascript", ".css":"text/css",
-    ".png":"image/png", ".jpg":"image/jpeg", ".svg":"image/svg+xml", ".ico":"image/x-icon" };
+    ".png":"image/png", ".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".webp":"image/webp",
+    ".svg":"image/svg+xml", ".ico":"image/x-icon" };
   fs.readFile(filePath, (err, data) => {
     if (err) { send(res, 404, "Not found"); return; }
     res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
@@ -263,6 +290,78 @@ const server = http.createServer(async (req, res) => {
     if (!s) { send(res, 401, { error: "unauthorized" }); return; }
     const data = getItems();
     send(res, 200, { updatedAt: data.updatedAt, items: data.items });
+    return;
+  }
+
+  // ---- Admin API ----
+  if (pathn === "/api/admin/login" && req.method === "POST") {
+    const body = await readBody(req);
+    let creds = {};
+    try { creds = JSON.parse(body); } catch {}
+    if (ADMIN_USERNAME && creds.username === ADMIN_USERNAME && creds.password === ADMIN_PASSWORD) {
+      const tok = makeToken();
+      adminSessions.set(tok, { user: creds.username, exp: Date.now() + SESSION_MS });
+      send(res, 200, { ok: true }, {
+        "Set-Cookie": `adminsession=${tok}; HttpOnly; Path=/; Max-Age=${SESSION_MS/1000}; SameSite=Lax`,
+      });
+    } else {
+      send(res, 401, { ok: false, error: "invalid" });
+    }
+    return;
+  }
+
+  if (pathn === "/api/admin/logout" && req.method === "POST") {
+    const cookie = req.headers.cookie || "";
+    const m = cookie.match(/adminsession=([a-f0-9]+)/);
+    if (m) adminSessions.delete(m[1]);
+    send(res, 200, { ok: true }, { "Set-Cookie": "adminsession=; Path=/; Max-Age=0" });
+    return;
+  }
+
+  if (pathn === "/api/admin/items") {
+    if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
+    const data = getItems();
+    send(res, 200, data);
+    return;
+  }
+
+  if (pathn === "/api/admin/images") {
+    if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
+    send(res, 200, { images: imageFiles.map(f => `/assets/product_images/${f}`) });
+    return;
+  }
+
+  if (pathn === "/api/admin/override" && req.method === "POST") {
+    if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
+    const body = await readBody(req);
+    let data = {};
+    try { data = JSON.parse(body); } catch {}
+    const { itemId, n, p, img } = data;
+    if (!itemId) { send(res, 400, { error: "itemId required" }); return; }
+    const overrides = loadOverrides();
+    if (!overrides[itemId]) overrides[itemId] = {};
+    if (n === null) delete overrides[itemId].n; else if (n !== undefined) overrides[itemId].n = n;
+    if (p === null) delete overrides[itemId].p; else if (p !== undefined) overrides[itemId].p = p;
+    if (img === null) delete overrides[itemId].img; else if (img !== undefined) overrides[itemId].img = img;
+    if (Object.keys(overrides[itemId]).length === 0) delete overrides[itemId];
+    saveOverrides(overrides);
+    send(res, 200, { ok: true });
+    return;
+  }
+
+  if (pathn === "/api/admin/upload" && req.method === "POST") {
+    if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
+    const body = await readBody(req);
+    let data = {};
+    try { data = JSON.parse(body); } catch {}
+    const { filename, imageData } = data;
+    if (!filename || !imageData) { send(res, 400, { error: "filename and imageData required" }); return; }
+    const safeName = path.basename(filename).replace(/[^a-zA-Z0-9._\-]/g, "_");
+    const m = imageData.match(/^data:image\/[a-zA-Z+]+;base64,(.+)$/);
+    if (!m) { send(res, 400, { error: "invalid imageData" }); return; }
+    fs.writeFileSync(path.join(IMAGE_DIR, safeName), Buffer.from(m[1], "base64"));
+    if (!imageFiles.includes(safeName)) imageFiles.push(safeName);
+    send(res, 200, { ok: true, img: `/assets/product_images/${safeName}` });
     return;
   }
 

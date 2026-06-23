@@ -3,13 +3,14 @@ import { T, PAGE } from './i18n.js';
 import Login from './Login.jsx';
 import Catalog from './Catalog.jsx';
 import Detail from './Detail.jsx';
+import Admin, { AdminLogin } from './Admin.jsx';
 
 async function api(path, opts) {
   return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('login');     // 'login' | 'catalog' | 'detail'
+  const [screen, setScreen] = useState('login');     // 'login' | 'catalog' | 'detail' | 'admin-login' | 'admin'
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState(false);
@@ -70,6 +71,21 @@ export default function App() {
   if (screen === 'detail' && selected) {
     return <Detail t={T} item={selected} onBack={onBack} />;
   }
+  if (screen === 'admin-login') {
+    return (
+      <AdminLogin
+        onSuccess={() => { setScreen('admin'); window.scrollTo(0,0); }}
+        onBack={() => { setScreen('catalog'); window.scrollTo(0,0); }}
+      />
+    );
+  }
+  if (screen === 'admin') {
+    return (
+      <Admin
+        onBack={() => { setScreen('catalog'); window.scrollTo(0,0); loadItems(); }}
+      />
+    );
+  }
   return (
     <Catalog
       t={T}
@@ -78,6 +94,7 @@ export default function App() {
       inStockOnly={inStockOnly} setInStockOnly={setInStockOnly}
       visible={visible} setVisible={setVisible}
       onLogout={onLogout} onOpen={onOpen}
+      onAdminClick={() => { setScreen('admin-login'); window.scrollTo(0,0); }}
     />
   );
 }
