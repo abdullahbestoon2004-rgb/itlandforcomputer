@@ -247,14 +247,12 @@ function readBody(req) {
   });
 }
 
-const ALLOWED_ORIGINS = (CONFIG.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
-
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT_NUM}`);
   const pathn = url.pathname;
   const origin = req.headers.origin || "";
 
-  if (ALLOWED_ORIGINS.length && ALLOWED_ORIGINS.includes(origin)) {
+  if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
