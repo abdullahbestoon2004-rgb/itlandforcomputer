@@ -5,7 +5,7 @@ export default function Login({ t, user, setUser, pass, setPass, error, loading,
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column' }}>
       <div style={{ height:4, background:'var(--pri)' }} />
       <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:'24px 20px 64px' }}>
-        <div style={{ width:'100%', maxWidth:430, background:'#fff', border:'2px solid #17130E', borderRadius:22, boxShadow:'6px 6px 0 #17130E', padding:'36px 32px' }}>
+        <div className="login-card" style={{ width:'100%', maxWidth:430, background:'#fff', border:'2px solid #17130E', borderRadius:22, boxShadow:'6px 6px 0 #17130E', padding:'36px 32px' }}>
           <div style={{ display:'flex', justifyContent:'center', marginBottom:26 }}>
             <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:52, width:'auto', maxWidth:'100%' }} />
           </div>

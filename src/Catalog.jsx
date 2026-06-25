@@ -101,7 +101,7 @@ export default function Catalog({
           </button>
           <button onClick={onLogout} style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            <span>{t.logout}</span>
+            <span className="hide-xs">{t.logout}</span>
           </button>
         </div>
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 14px' }}>
@@ -113,6 +113,16 @@ export default function Catalog({
               placeholder={t.searchPh}
               style={{ width:'100%', padding:'14px 16px 14px 48px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:14, boxShadow:'0 1px 2px rgba(23,19,14,.05)' }}
             />
+          </div>
+        </div>
+
+        {/* Mobile category strip */}
+        <div className="mobile-cats" style={{ borderTop:'1px solid #E9DFC9', overflowX:'auto', scrollbarWidth:'none' }}>
+          <div style={{ padding:'8px 16px', display:'flex', gap:6 }}>
+            <button onClick={() => selectCategory('')} style={{ flexShrink:0, padding:'5px 12px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (category===''?'#17130E':'#E9DFC9'), background:category===''?'#17130E':'#fff', color:category===''?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap' }}>All</button>
+            {CATEGORIES.map(cat => (
+              <button key={cat.id} onClick={() => selectCategory(cat.id === category ? '' : cat.id)} style={{ flexShrink:0, padding:'5px 12px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (category===cat.id?'#17130E':'#E9DFC9'), background:category===cat.id?'#17130E':'#fff', color:category===cat.id?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap' }}>{cat.label}</button>
+            ))}
           </div>
         </div>
 
@@ -160,8 +170,8 @@ export default function Catalog({
                 {vis.map(it => (
                   <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
                     {it.img && (
-                      <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, overflow:'hidden' }}>
-                        <img src={it.img} alt={it.n} style={{ maxHeight:118, maxWidth:'100%', objectFit:'contain' }} />
+                      <div className="card-img" style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, overflow:'hidden' }}>
+                        <img src={it.img} alt={it.n} style={{ maxHeight:'100%', maxWidth:'100%', objectFit:'contain' }} />
                       </div>
                     )}
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>

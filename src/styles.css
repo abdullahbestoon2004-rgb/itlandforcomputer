@@ -37,3 +37,27 @@ button { font-family:inherit; }
 
 /* Hide category sidebar on small screens */
 @media (max-width: 768px) { .cat-sidebar { display: none !important; } }
+
+/* Mobile category horizontal strip — hidden on desktop, shown on mobile */
+.mobile-cats { display: none; }
+@media (max-width: 768px) { .mobile-cats { display: block; } }
+
+/* Hide button labels on very small screens */
+@media (max-width: 480px) { .hide-xs { display: none !important; } }
+
+/* Smaller card images on mobile */
+@media (max-width: 700px) { .card-img { height: 90px !important; } }
+
+/* Detail page — responsive */
+@media (max-width: 600px) {
+  .detail-wrap  { padding: 14px 14px 60px !important; }
+  .detail-card  { padding: 16px 16px 20px !important; }
+  .detail-img   { min-height: 150px !important; padding: 14px !important; }
+  .detail-price { font-size: 26px !important; }
+  .detail-title { font-size: 20px !important; }
+}
+
+/* Login page — tighten on very small screens */
+@media (max-width: 400px) {
+  .login-card { padding: 24px 18px !important; border-radius: 16px !important; }
+}
