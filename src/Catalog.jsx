@@ -93,7 +93,7 @@ export default function Catalog({
     <div>
       <div style={{ height:4, background:'var(--pri)' }} />
       <header style={{ position:'sticky', top:0, zIndex:20, background:'rgba(255,252,245,.92)', backdropFilter:'blur(10px)', borderBottom:'1.5px solid #E9DFC9' }}>
-        <div style={{ maxWidth:1200, margin:'0 auto', padding:'14px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+        <div style={{ maxWidth:1500, margin:'0 auto', padding:'14px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:30, width:'auto' }} />
           <div style={{ flex:1 }} />
           <button onClick={onAdminClick} title="Admin Panel" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:38, padding:0, color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
@@ -104,7 +104,7 @@ export default function Catalog({
             <span>{t.logout}</span>
           </button>
         </div>
-        <div style={{ maxWidth:1200, margin:'0 auto', padding:'0 20px 14px' }}>
+        <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 14px' }}>
           <div style={{ position:'relative', maxWidth:560 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
@@ -118,7 +118,7 @@ export default function Catalog({
 
         {/* Brand filter bar */}
         <div style={{ borderTop:'1px solid #E9DFC9', overflowX:'auto', scrollbarWidth:'none' }}>
-          <div style={{ maxWidth:1200, margin:'0 auto', padding:'10px 20px', display:'flex', gap:8, alignItems:'center' }}>
+          <div style={{ maxWidth:1500, margin:'0 auto', padding:'10px 20px', display:'flex', gap:8, alignItems:'center' }}>
             <button onClick={() => selectBrand('')} style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===''?'#17130E':'#E9DFC9'), background:brand===''?'#17130E':'#fff', color:brand===''?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}>All</button>
             {brands.map(b => (
               <button key={b} onClick={() => selectBrand(b === brand ? '' : b)} style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===b?'#17130E':'#E9DFC9'), background:brand===b?'#17130E':'#fff', color:brand===b?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}>{b}</button>
@@ -128,7 +128,7 @@ export default function Catalog({
       </header>
 
       {/* Body: sidebar + content */}
-      <div style={{ maxWidth:1200, margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
+      <div style={{ maxWidth:1500, margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
 
         {/* Category sidebar */}
         <aside style={{ width:185, flexShrink:0, borderRight:'1.5px solid #E9DFC9', padding:'22px 0 80px', position:'sticky', top:177, maxHeight:'calc(100vh - 177px)', overflowY:'auto', scrollbarWidth:'none' }}>
