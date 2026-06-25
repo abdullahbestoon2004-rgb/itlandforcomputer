@@ -6,16 +6,37 @@ function extractBrand(name) {
   return (name || '').split(' ')[0] || '';
 }
 
+const CATEGORIES = [
+  { id: 'mouse',    label: 'Mouse',           keys: ['mouse'] },
+  { id: 'keyboard', label: 'Keyboard',         keys: ['keyboard'] },
+  { id: 'headset',  label: 'Headset',          keys: ['headset', 'headphone', 'earphone', 'blackwire', 'evolve', 'voyager'] },
+  { id: 'adapter',  label: 'Adapter / Hub',    keys: ['hub', 'adapter', 'dock'] },
+  { id: 'mic',      label: 'Microphone',       keys: ['microphone', 'yeti', 'snowball'] },
+  { id: 'speakers', label: 'Speakers',         keys: ['speaker'] },
+  { id: 'stream',   label: 'Streaming',        keys: ['stream deck', 'elgato', 'litra'] },
+  { id: 'video',    label: 'Video Conference', keys: ['webcam', 'conference', 'meetup', 'rally', 'brio', 'streamcam', 'speak2', 'speak 5', 'poly sync', 'tap ip', 'scribe'] },
+];
+
+function matchesCategory(it, catId) {
+  if (!catId) return true;
+  const cat = CATEGORIES.find(c => c.id === catId);
+  if (!cat) return true;
+  const text = ((it.n || '') + ' ' + (it.d || '')).toLowerCase();
+  return cat.keys.some(k => text.includes(k));
+}
+
 export default function Catalog({
   t, items, loading,
   query, setQuery, inStockOnly, setInStockOnly,
   visible, setVisible, onLogout, onOpen, onAdminClick,
 }) {
   const [brand, setBrand] = useState('');
+  const [category, setCategory] = useState('');
 
   const brands = ['Logitech', 'Anker', 'Onten', 'Lention', 'Poly', 'Jabra', 'JBL'];
 
-  const all = useMemo(() => {
+  // Pre-filtered (brand + stock + search) — used for category counts
+  const preFiltered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter(it => {
       if (brand && extractBrand(it.n).toLowerCase() !== brand.toLowerCase()) return false;
@@ -25,11 +46,48 @@ export default function Catalog({
     });
   }, [items, query, inStockOnly, brand]);
 
+  // Category counts from pre-filtered list
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    for (const cat of CATEGORIES) {
+      counts[cat.id] = preFiltered.filter(it => matchesCategory(it, cat.id)).length;
+    }
+    return counts;
+  }, [preFiltered]);
+
+  // Final filtered list
+  const all = useMemo(() => {
+    if (!category) return preFiltered;
+    return preFiltered.filter(it => matchesCategory(it, category));
+  }, [preFiltered, category]);
+
   const vis = all.slice(0, visible);
   const hasMore = vis.length < all.length;
   const on = inStockOnly;
 
   const selectBrand = (b) => { setBrand(b); setVisible(PAGE); };
+  const selectCategory = (c) => { setCategory(c); setVisible(PAGE); };
+
+  const catBtn = (id, label, count) => {
+    const active = category === id;
+    return (
+      <button
+        key={id}
+        onClick={() => selectCategory(active ? '' : id)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '8px 11px', marginBottom: 3, fontSize: 13.5, fontWeight: active ? 800 : 500,
+          fontFamily: 'inherit', color: active ? '#fff' : '#2B2419',
+          background: active ? '#17130E' : 'transparent',
+          border: '1.5px solid ' + (active ? '#17130E' : 'transparent'),
+          borderRadius: 10, cursor: 'pointer', textAlign: 'left', transition: 'all .1s',
+        }}
+      >
+        <span>{label}</span>
+        <span style={{ fontSize: 11, fontFamily: "'Space Mono',monospace", opacity: .65 }}>{count}</span>
+      </button>
+    );
+  };
 
   return (
     <div>
@@ -61,74 +119,82 @@ export default function Catalog({
         {/* Brand filter bar */}
         <div style={{ borderTop:'1px solid #E9DFC9', overflowX:'auto', scrollbarWidth:'none' }}>
           <div style={{ maxWidth:1200, margin:'0 auto', padding:'10px 20px', display:'flex', gap:8, alignItems:'center' }}>
-            <button
-              onClick={() => selectBrand('')}
-              style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===''?'#17130E':'#E9DFC9'), background:brand===''?'#17130E':'#fff', color:brand===''?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}
-            >All</button>
+            <button onClick={() => selectBrand('')} style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===''?'#17130E':'#E9DFC9'), background:brand===''?'#17130E':'#fff', color:brand===''?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}>All</button>
             {brands.map(b => (
-              <button
-                key={b}
-                onClick={() => selectBrand(b === brand ? '' : b)}
-                style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===b?'#17130E':'#E9DFC9'), background:brand===b?'#17130E':'#fff', color:brand===b?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}
-              >{b}</button>
+              <button key={b} onClick={() => selectBrand(b === brand ? '' : b)} style={{ flexShrink:0, padding:'6px 14px', fontSize:13, fontWeight:700, fontFamily:'inherit', borderRadius:999, border:'1.5px solid ' + (brand===b?'#17130E':'#E9DFC9'), background:brand===b?'#17130E':'#fff', color:brand===b?'#fff':'#2B2419', cursor:'pointer', whiteSpace:'nowrap', transition:'all .12s' }}>{b}</button>
             ))}
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth:1200, margin:'0 auto', padding:'20px 20px 80px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', marginBottom:18 }}>
-          <button onClick={() => { setInStockOnly(!on); setVisible(PAGE); }} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'7px 12px 7px 8px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>
-            <span style={{ display:'inline-flex', alignItems:'center', width:42, height:25, padding:2, borderRadius:999, background:on?'var(--pri)':'#D6CDBB', justifyContent:on?'flex-end':'flex-start', transition:'background .15s ease', border:'1.5px solid ' + (on?'#17130E':'#C7BDAA') }}>
-              <span style={{ width:19, height:19, borderRadius:'50%', background:'#fff', boxShadow:'0 1px 2px rgba(0,0,0,.25)' }} />
-            </span>
-            <span style={{ fontSize:14.5, fontWeight:700, color:'#2B2419' }}>{t.inStockOnly}</span>
-          </button>
-          <div style={{ fontSize:13, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071' }}>
-            {loading ? '…' : all.length.toLocaleString() + ' ' + t.items}
-          </div>
-        </div>
+      {/* Body: sidebar + content */}
+      <div style={{ maxWidth:1200, margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
 
-        {all.length > 0 ? (
-          <>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(var(--cardmin), 1fr))', gap:16 }}>
-              {vis.map(it => (
-                <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
-                  {it.img && (
-                    <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, overflow:'hidden' }}>
-                      <img src={it.img} alt={it.n} style={{ maxHeight:118, maxWidth:'100%', objectFit:'contain' }} />
-                    </div>
-                  )}
-                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>
-                    <span style={{ fontSize:11, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', letterSpacing:'.02em', paddingTop:2 }}>{it.barcode}</span>
-                    <StockBadge inStock={it.k} t={t} />
-                  </div>
-                  <div style={{ fontSize:16, fontWeight:700, lineHeight:1.35, color:'#17130E' }}>{it.n}</div>
-                  <div style={{ marginTop:'auto', paddingTop:8, borderTop:'1px dashed #E9DFC9', display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8 }}>
-                    <span style={{ fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:'#8B8071' }}>{t.wholesalePrice}</span>
-                    <span dir="ltr" style={{ fontSize:it.p==null?13:22, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#17130E' }}>{priceLabel(it, t)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {hasMore && (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, marginTop:30 }}>
-                <button className="btn-press" onClick={() => setVisible(visible + PAGE)} style={{ padding:'12px 26px', fontSize:15, fontWeight:800, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'2px solid #17130E', borderRadius:14, boxShadow:'3px 3px 0 #17130E', cursor:'pointer' }}>{t.loadMore}</button>
-                <div style={{ fontSize:12.5, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071' }}>{t.showing.replace('{b}', vis.length).replace('{n}', all.length.toLocaleString())}</div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div style={{ textAlign:'center', padding:'70px 20px' }}>
-            <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:64, height:64, borderRadius:18, background:'#F3ECDB', border:'1.5px solid #E9DFC9', marginBottom:18 }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            </div>
-            <h2 style={{ margin:'0 0 8px', fontSize:20, fontWeight:800 }}>{t.noItemsTitle}</h2>
-            <p style={{ margin:'0 0 20px', fontSize:14.5, color:'#8B8071', maxWidth:340, marginInline:'auto', lineHeight:1.55 }}>{t.noItemsBody}</p>
-            <button className="btn-press" onClick={() => { setQuery(''); setInStockOnly(false); setVisible(PAGE); setBrand(''); }} style={{ padding:'11px 22px', fontSize:14.5, fontWeight:800, fontFamily:'inherit', color:'#fff', background:'var(--acc)', border:'2px solid #17130E', borderRadius:14, boxShadow:'3px 3px 0 #17130E', cursor:'pointer' }}>{t.clearFilters}</button>
+        {/* Category sidebar */}
+        <aside style={{ width:185, flexShrink:0, borderRight:'1.5px solid #E9DFC9', padding:'22px 0 80px', position:'sticky', top:177, maxHeight:'calc(100vh - 177px)', overflowY:'auto', scrollbarWidth:'none' }}>
+          <div style={{ padding:'0 14px' }}>
+            <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:'#8B8071', marginBottom:10, paddingLeft:4 }}>Categories</div>
+            {catBtn('', 'All', preFiltered.length)}
+            <div style={{ height:1, background:'#E9DFC9', margin:'8px 0' }} />
+            {CATEGORIES.map(cat => catBtn(cat.id, cat.label, categoryCounts[cat.id] || 0))}
           </div>
-        )}
-      </main>
+        </aside>
+
+        {/* Main content */}
+        <div style={{ flex:1, padding:'20px 20px 80px', minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', marginBottom:18 }}>
+            <button onClick={() => { setInStockOnly(!on); setVisible(PAGE); }} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'7px 12px 7px 8px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>
+              <span style={{ display:'inline-flex', alignItems:'center', width:42, height:25, padding:2, borderRadius:999, background:on?'var(--pri)':'#D6CDBB', justifyContent:on?'flex-end':'flex-start', transition:'background .15s ease', border:'1.5px solid ' + (on?'#17130E':'#C7BDAA') }}>
+                <span style={{ width:19, height:19, borderRadius:'50%', background:'#fff', boxShadow:'0 1px 2px rgba(0,0,0,.25)' }} />
+              </span>
+              <span style={{ fontSize:14.5, fontWeight:700, color:'#2B2419' }}>{t.inStockOnly}</span>
+            </button>
+            <div style={{ fontSize:13, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071' }}>
+              {loading ? '…' : all.length.toLocaleString() + ' ' + t.items}
+            </div>
+          </div>
+
+          {all.length > 0 ? (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(var(--cardmin), 1fr))', gap:16 }}>
+                {vis.map(it => (
+                  <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
+                    {it.img && (
+                      <div style={{ height:130, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, overflow:'hidden' }}>
+                        <img src={it.img} alt={it.n} style={{ maxHeight:118, maxWidth:'100%', objectFit:'contain' }} />
+                      </div>
+                    )}
+                    <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>
+                      <span style={{ fontSize:11, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', letterSpacing:'.02em', paddingTop:2 }}>{it.barcode}</span>
+                      <StockBadge inStock={it.k} t={t} />
+                    </div>
+                    <div style={{ fontSize:16, fontWeight:700, lineHeight:1.35, color:'#17130E' }}>{it.n}</div>
+                    <div style={{ marginTop:'auto', paddingTop:8, borderTop:'1px dashed #E9DFC9', display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:'#8B8071' }}>{t.wholesalePrice}</span>
+                      <span dir="ltr" style={{ fontSize:it.p==null?13:22, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#17130E' }}>{priceLabel(it, t)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {hasMore && (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:10, marginTop:30 }}>
+                  <button className="btn-press" onClick={() => setVisible(visible + PAGE)} style={{ padding:'12px 26px', fontSize:15, fontWeight:800, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'2px solid #17130E', borderRadius:14, boxShadow:'3px 3px 0 #17130E', cursor:'pointer' }}>{t.loadMore}</button>
+                  <div style={{ fontSize:12.5, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071' }}>{t.showing.replace('{b}', vis.length).replace('{n}', all.length.toLocaleString())}</div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ textAlign:'center', padding:'70px 20px' }}>
+              <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:64, height:64, borderRadius:18, background:'#F3ECDB', border:'1.5px solid #E9DFC9', marginBottom:18 }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+              <h2 style={{ margin:'0 0 8px', fontSize:20, fontWeight:800 }}>{t.noItemsTitle}</h2>
+              <p style={{ margin:'0 0 20px', fontSize:14.5, color:'#8B8071', maxWidth:340, marginInline:'auto', lineHeight:1.55 }}>{t.noItemsBody}</p>
+              <button className="btn-press" onClick={() => { setQuery(''); setInStockOnly(false); setVisible(PAGE); setBrand(''); setCategory(''); }} style={{ padding:'11px 22px', fontSize:14.5, fontWeight:800, fontFamily:'inherit', color:'#fff', background:'var(--acc)', border:'2px solid #17130E', borderRadius:14, boxShadow:'3px 3px 0 #17130E', cursor:'pointer' }}>{t.clearFilters}</button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
