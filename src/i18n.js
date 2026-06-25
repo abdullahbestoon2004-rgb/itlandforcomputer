@@ -1,3 +1,3 @@
 export const T = { portalTag:'Wholesale Portal', loginTitle:'Sign in to your account', loginSubtitle:'For wholesale clients only. Contact us for access.', username:'Username or email', usernamePh:'name@company.com', password:'Password', passwordPh:'Enter your password', signIn:'Sign in', loginError:'Invalid username or password.', searchPh:'Search for an item or code…', inStock:'In Stock', outOfStock:'Out of Stock', inStockOnly:'In stock only', all:'All', wholesalePrice:'Wholesale price', noItemsTitle:'No items found', noItemsBody:'Try a different search term, or clear your filters.', clearFilters:'Clear filters', loadMore:'Load more', logout:'Log out', back:'Back to catalog', description:'Description', code:'Code', availability:'Availability', items:'items', showing:'Showing {b} of {n}', retailPrice:'Retail price', noWholesale:'Contact for price', stockCount:'In stock', updated:'Updated' };
 
-export const PAGE = 12;
+export const PAGE = 15;

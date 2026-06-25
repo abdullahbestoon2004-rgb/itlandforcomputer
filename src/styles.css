@@ -24,3 +24,16 @@ button { font-family:inherit; }
 .card:hover { transform:translate(-2px,-2px); box-shadow:4px 4px 0 #17130E; border-color:#17130E; }
 
 .inp:focus { border-color:var(--acc) !important; box-shadow:0 0 0 3px rgba(43,77,255,.16) !important; }
+
+/* Responsive catalog grid — 5 cols on wide, scales down automatically */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+@media (max-width: 1300px) { .catalog-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 1050px) { .catalog-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px)  { .catalog-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* Hide category sidebar on small screens */
+@media (max-width: 768px) { .cat-sidebar { display: none !important; } }

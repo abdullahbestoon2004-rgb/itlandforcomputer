@@ -131,7 +131,7 @@ export default function Catalog({
       <div style={{ maxWidth:1500, margin:'0 auto', display:'flex', alignItems:'flex-start' }}>
 
         {/* Category sidebar */}
-        <aside style={{ width:185, flexShrink:0, borderRight:'1.5px solid #E9DFC9', padding:'22px 0 80px', position:'sticky', top:177, maxHeight:'calc(100vh - 177px)', overflowY:'auto', scrollbarWidth:'none' }}>
+        <aside className="cat-sidebar" style={{ width:185, flexShrink:0, borderRight:'1.5px solid #E9DFC9', padding:'22px 0 80px', position:'sticky', top:177, maxHeight:'calc(100vh - 177px)', overflowY:'auto', scrollbarWidth:'none' }}>
           <div style={{ padding:'0 14px' }}>
             <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase', color:'#8B8071', marginBottom:10, paddingLeft:4 }}>Categories</div>
             {catBtn('', 'All', preFiltered.length)}
@@ -156,7 +156,7 @@ export default function Catalog({
 
           {all.length > 0 ? (
             <>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:16 }}>
+              <div className="catalog-grid">
                 {vis.map(it => (
                   <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
                     {it.img && (
