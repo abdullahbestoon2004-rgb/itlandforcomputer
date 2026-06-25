@@ -111,8 +111,16 @@ export default function Catalog({
               className="inp" type="text" value={query}
               onChange={e => { setQuery(e.target.value); setVisible(PAGE); }}
               placeholder={t.searchPh}
-              style={{ width:'100%', padding:'14px 16px 14px 48px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:14, boxShadow:'0 1px 2px rgba(23,19,14,.05)' }}
+              style={{ width:'100%', padding:'14px 44px 14px 48px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:14, boxShadow:'0 1px 2px rgba(23,19,14,.05)' }}
             />
+            {query && (
+              <button
+                onClick={() => { setQuery(''); setVisible(PAGE); }}
+                style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', display:'flex', alignItems:'center', justifyContent:'center', width:24, height:24, padding:0, background:'#D6CDBB', border:'none', borderRadius:'50%', cursor:'pointer', color:'#2B2419' }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            )}
           </div>
         </div>
 
