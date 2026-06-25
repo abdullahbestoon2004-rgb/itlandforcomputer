@@ -156,7 +156,7 @@ export default function Catalog({
 
           {all.length > 0 ? (
             <>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(var(--cardmin), 1fr))', gap:16 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:16 }}>
                 {vis.map(it => (
                   <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:'var(--cardpad)', cursor:'pointer', display:'flex', flexDirection:'column', gap:10, boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
                     {it.img && (
