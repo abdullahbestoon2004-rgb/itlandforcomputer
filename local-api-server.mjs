@@ -95,9 +95,29 @@ function getCustomField(item, label) {
   return (item.custom_fields ?? []).find(f => f.label === label)?.value ?? null;
 }
 
+function getWholesalePrice(item) {
+  const customFields = item.custom_fields ?? [];
+  const cf = customFields.find((f) =>
+    /wholesale|office\s*price/i.test(f.label ?? '') ||
+    /wholesale|office/i.test(f.api_name ?? '')
+  );
+  if (cf && cf.value != null && cf.value !== '') {
+    const parsed = parseFloat(String(cf.value).replace(/[^0-9.]/g, ''));
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const desc = `${item.description ?? ''} ${item.purchase_description ?? ''}`;
+  const match = desc.match(/(?:Office\s+Price|Wholesale\s+Price|Wholesale|Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
+  if (match) {
+    const parsed = parseFloat(match[1].replace(',', '.'));
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (item.rate != null && Number(item.rate) > 0) return Number(item.rate);
+  if (item.purchase_rate != null && Number(item.purchase_rate) > 0) return Number(item.purchase_rate);
+  return null;
+}
+
 function normalizeItem(item, index) {
-  const wholesaleRaw = getCustomField(item, 'Wholesale Price');
-  const wholesalePrice = wholesaleRaw != null ? parseFloat(String(wholesaleRaw).replace(/[^0-9.]/g, '')) : null;
+  const wholesalePrice = getWholesalePrice(item);
   const imageUrl = getCustomField(item, 'Image URL');
   const stockOnHand = item.stock_on_hand != null ? Number(item.stock_on_hand) : null;
   const customBarcode = getCustomField(item, 'Barcode') || getCustomField(item, 'UPC') || getCustomField(item, 'EAN');
@@ -117,7 +137,7 @@ function normalizeItem(item, index) {
     barcode: barcode,
     description: item.description ?? '',
     price: Number(item.rate ?? 0),
-    wholesale_price: isNaN(wholesalePrice) ? null : wholesalePrice,
+    wholesale_price: wholesalePrice,
     category: item.product_type ?? 'Accessories',
     brand: getCustomField(item, 'Brand') ?? '',
     images: imageUrl ? [imageUrl] : [PLACEHOLDER_IMAGE],
