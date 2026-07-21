@@ -13,7 +13,7 @@ export default function Login({ t, user, setUser, pass, setPass, error, loading,
 
           <label style={{ display:'block', fontSize:13.5, fontWeight:700, color:'#2B2419', marginBottom:7 }}>{t.username}</label>
           <input
-            className="inp" type="text" value={user} dir="ltr"
+            className="inp" type="email" value={user} dir="ltr"
             onChange={e => setUser(e.target.value)}
             placeholder={t.usernamePh}
             style={{ width:'100%', padding:'13px 14px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, marginBottom:16 }}

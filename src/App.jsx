@@ -24,36 +24,68 @@ export default function App() {
 
   const loadItems = useCallback(async () => {
     setLoading(true);
-    const res = await api('/api/items');
-    if (res.status === 401) { setScreen('login'); setLoading(false); return; }
-    const data = await res.json();
-    setItems(data.items || []);
-    setLoading(false);
+    try {
+      const res = await api('/api/products');
+      if (!res.ok) { setLoading(false); return; }
+      const data = await res.json();
+      const rawProducts = data.products || [];
+      const normalized = rawProducts.map((p, index) => ({
+        id: p.id || p.zoho_item_id || String(index),
+        n: p.name || '',
+        s: p.brand || '',
+        barcode: p.brand || '',
+        p: p.wholesale_price,
+        retail: p.price,
+        k: Boolean(p.in_stock),
+        stock: p.stock_on_hand ?? 0,
+        d: p.description || '',
+        img: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null,
+      }));
+      setItems(normalized);
+    } catch (err) {
+      console.error('Failed to fetch products:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await api('/api/me');
-        const data = await res.json();
-        if (data.loggedIn) { setScreen('catalog'); loadItems(); }
-      } catch {}
-    })();
+    const clientStr = localStorage.getItem('wholesale_client');
+    if (clientStr) {
+      setScreen('catalog');
+      loadItems();
+    }
   }, [loadItems]);
 
   const onLogin = async () => {
     if (!user.trim() || !pass.trim()) { setError(true); return; }
     setLoading(true);
-    const res = await api('/api/login', { method:'POST', body: JSON.stringify({ username:user, password:pass }) });
-    setLoading(false);
-    if (res.ok) { setError(false); setScreen('catalog'); window.scrollTo(0,0); loadItems(); }
-    else setError(true);
+    try {
+      const res = await api('/api/wholesale-login', {
+        method: 'POST',
+        body: JSON.stringify({ email: user.trim(), password: pass }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        localStorage.setItem('wholesale_client', JSON.stringify(data.client));
+        setError(false);
+        setScreen('catalog');
+        window.scrollTo(0, 0);
+        loadItems();
+      } else {
+        setError(true);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onLogout = async () => {
-    await api('/api/logout', { method:'POST' });
+    localStorage.removeItem('wholesale_client');
     setScreen('login'); setQuery(''); setInStockOnly(false); setVisible(PAGE);
-    setSelected(null); setUser(''); setPass(''); window.scrollTo(0,0);
+    setSelected(null); setUser(''); setPass(''); window.scrollTo(0, 0);
   };
 
   const onOpen = (it) => { setSelected(it); setScreen('detail'); window.scrollTo(0,0); };

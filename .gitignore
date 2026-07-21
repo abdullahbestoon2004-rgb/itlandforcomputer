@@ -5,3 +5,5 @@ wholesale-prices.json
 
 # NEVER commit your secrets:
 config.json
+.env
+.vercel/
