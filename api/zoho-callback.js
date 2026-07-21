@@ -6,8 +6,8 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   let code = req.query.code;
-  let clientId = req.query.client_id || process.env.ZOHO_CLIENT_ID;
-  let clientSecret = req.query.client_secret || process.env.ZOHO_CLIENT_SECRET;
+  let clientId = req.query.client_id || process.env.ZOHO_CLIENT_ID || '1000.06T75SSOK56I52CL0GHJL45YVSG7DK';
+  let clientSecret = req.query.client_secret || process.env.ZOHO_CLIENT_SECRET || '783ace0cbad1786e5b0fd1834c72e63668c59978fb';
 
   if (req.method === 'POST') {
     const chunks = [];
