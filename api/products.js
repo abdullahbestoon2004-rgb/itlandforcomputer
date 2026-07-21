@@ -78,13 +78,21 @@ function normalizeItem(item, index) {
 
   const imageUrl = getCustomField(item, 'Image URL');
   const stockOnHand = item.stock_on_hand != null ? Number(item.stock_on_hand) : null;
-  const barcode = getCustomField(item, 'Barcode') || getCustomField(item, 'UPC') || getCustomField(item, 'EAN') || item.name || '';
+  const customBarcode = getCustomField(item, 'Barcode') || getCustomField(item, 'UPC') || getCustomField(item, 'EAN');
+
+  const rawName = (item.name ?? '').trim();
+  const rawSku = (item.sku ?? '').trim();
+  const isNameDigits = /^\d+$/.test(rawName);
+
+  // If item.name is numeric digits (barcode), use SKU as Model Name
+  const modelName = (isNameDigits && rawSku) ? rawSku : (rawName || rawSku);
+  const barcode = customBarcode || (isNameDigits ? rawName : (rawSku || rawName));
 
   return {
     id: String(item.item_id),
     zoho_item_id: String(item.item_id),
-    name: item.name ?? '',
-    sku: item.sku ?? '',
+    name: modelName,
+    sku: rawSku,
     barcode: barcode,
     description: item.description ?? '',
     price: Number(item.rate ?? 0),

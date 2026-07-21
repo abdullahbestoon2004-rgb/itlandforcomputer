@@ -100,10 +100,21 @@ function normalizeItem(item, index) {
   const wholesalePrice = wholesaleRaw != null ? parseFloat(String(wholesaleRaw).replace(/[^0-9.]/g, '')) : null;
   const imageUrl = getCustomField(item, 'Image URL');
   const stockOnHand = item.stock_on_hand != null ? Number(item.stock_on_hand) : null;
+  const customBarcode = getCustomField(item, 'Barcode') || getCustomField(item, 'UPC') || getCustomField(item, 'EAN');
+
+  const rawName = (item.name ?? '').trim();
+  const rawSku = (item.sku ?? '').trim();
+  const isNameDigits = /^\d+$/.test(rawName);
+
+  const modelName = (isNameDigits && rawSku) ? rawSku : (rawName || rawSku);
+  const barcode = customBarcode || (isNameDigits ? rawName : (rawSku || rawName));
+
   return {
     id: String(item.item_id),
     zoho_item_id: String(item.item_id),
-    name: item.name ?? '',
+    name: modelName,
+    sku: rawSku,
+    barcode: barcode,
     description: item.description ?? '',
     price: Number(item.rate ?? 0),
     wholesale_price: isNaN(wholesalePrice) ? null : wholesalePrice,

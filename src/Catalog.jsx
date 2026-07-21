@@ -189,21 +189,16 @@ export default function Catalog({
                     <div className="card-content" style={{ padding:'var(--cardpad)', display:'flex', flexDirection:'column', gap:8, flex:1 }}>
                       <div className="card-top" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>
                         <span className="card-barcode" style={{ fontSize:11, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', letterSpacing:'.02em', paddingTop:2 }}>
-                          {it.barcode ? `${t.code}: ${it.barcode}` : (it.sku ? `SKU: ${it.sku}` : '')}
+                          {it.barcode ? `${t.code}: ${it.barcode}` : ''}
                         </span>
                         <StockBadge inStock={it.k} t={t} />
                       </div>
-                      <div className="card-name" style={{ fontSize:15, fontWeight:700, lineHeight:1.35, color:'#17130E', display:'flex', flexDirection:'column', gap:4 }}>
-                        <span>{it.n}</span>
-                        {it.sku && (
-                          <span style={{ fontSize:11.5, fontFamily:"'Space Mono',monospace", fontWeight:700, color:'#8B8071', background:'#F3ECDB', padding:'2px 6px', borderRadius:5, alignSelf:'flex-start' }}>
-                            SKU: {it.sku}
-                          </span>
-                        )}
+                      <div className="card-name" style={{ fontSize:16, fontWeight:800, lineHeight:1.35, color:'#17130E' }}>
+                        {it.n}
                       </div>
                       <div className="card-price-row" style={{ marginTop:'auto', paddingTop:8, borderTop:'1px dashed #E9DFC9', display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8 }}>
                         <span className="card-price-label" style={{ fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:'#8B8071' }}>{t.wholesalePrice}</span>
-                        <span className="card-price-val" dir="ltr" style={{ fontSize:it.p==null?13:20, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:'var(--pri)' }}>{priceLabel(it, t)}</span>
+                        <span className="card-price-val" dir="ltr" style={{ fontSize:it.p==null?13:20, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:it.p==null?'#DE3A1E':'var(--pri)' }}>{priceLabel(it, t)}</span>
                       </div>
                     </div>
                   </div>
