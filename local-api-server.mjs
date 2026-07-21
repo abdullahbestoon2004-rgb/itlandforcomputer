@@ -170,38 +170,40 @@ const LOCAL_IMAGES = [
 
 function findProductImage(item) {
   const customImg = getCustomField(item, 'Image URL');
-  if (customImg && customImg.startsWith('http')) return customImg;
+  if (customImg && typeof customImg === 'string' && customImg.startsWith('http')) return customImg;
 
   const rawName = (item.name ?? '').trim();
   const rawSku = (item.sku ?? '').trim();
   const rawDesc = `${item.description ?? ''} ${item.purchase_description ?? ''}`.trim();
 
-  const text = `${rawName} ${rawSku} ${rawDesc}`.toLowerCase();
-  const words = new Set(text.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(t => t.length > 0));
+  const fullText = `${rawName} ${rawSku} ${rawDesc}`.toLowerCase();
+  const textWords = new Set(fullText.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(t => t.length > 0));
 
   let bestFile = null;
   let bestScore = 0;
 
   for (const file of LOCAL_IMAGES) {
-    const tokens = file.replace(/\.[^.]+$/, '').split(/[_\-]/).map(t => t.toLowerCase()).filter(t => t.length > 1);
-    const matched = tokens.filter(t => words.has(t)).length;
-    if (matched > 0 && matched > bestScore) {
-      bestScore = matched;
-      bestFile = file;
-    }
-  }
+    const nameWithoutExt = file.replace(/\.[^.]+$/, '');
+    const tokens = nameWithoutExt.split(/[_\-]/).map(t => t.toLowerCase()).filter(t => t.length > 1);
 
-  if (!bestFile || bestScore < 1) {
-    for (const file of LOCAL_IMAGES) {
-      const modelToken = file.replace(/\.[^.]+$/, '').split(/[_\-]/).find(t => t.length >= 3 && /\d/.test(t));
-      if (modelToken && words.has(modelToken.toLowerCase())) {
+    const modelToken = tokens.find(t => t.length >= 3 && /\d/.test(t));
+
+    if (modelToken && textWords.has(modelToken)) {
+      const score = 100 + modelToken.length;
+      if (score > bestScore) {
+        bestScore = score;
         bestFile = file;
-        break;
+      }
+    } else {
+      const matched = tokens.filter(t => textWords.has(t)).length;
+      if (matched === tokens.length && matched > 1 && matched > bestScore) {
+        bestScore = matched;
+        bestFile = file;
       }
     }
   }
 
-  return bestFile ? `/assets/product_images/${bestFile}` : PLACEHOLDER_IMAGE;
+  return bestFile ? `/assets/product_images/${bestFile}` : null;
 }
 
 function normalizeItem(item, index) {
@@ -228,7 +230,7 @@ function normalizeItem(item, index) {
     wholesale_price: wholesalePrice,
     category: item.product_type ?? 'Accessories',
     brand: getCustomField(item, 'Brand') ?? '',
-    images: [matchedImage],
+    images: matchedImage ? [matchedImage] : [],
     featured: getCustomField(item, 'Featured')?.toLowerCase() === 'true',
     order_index: index,
     stock_on_hand: stockOnHand,
