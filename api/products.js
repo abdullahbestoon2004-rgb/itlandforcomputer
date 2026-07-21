@@ -78,11 +78,14 @@ function normalizeItem(item, index) {
 
   const imageUrl = getCustomField(item, 'Image URL');
   const stockOnHand = item.stock_on_hand != null ? Number(item.stock_on_hand) : null;
+  const barcode = getCustomField(item, 'Barcode') || getCustomField(item, 'UPC') || getCustomField(item, 'EAN') || item.name || '';
 
   return {
     id: String(item.item_id),
     zoho_item_id: String(item.item_id),
     name: item.name ?? '',
+    sku: item.sku ?? '',
+    barcode: barcode,
     description: item.description ?? '',
     price: Number(item.rate ?? 0),
     wholesale_price: isNaN(wholesalePrice) ? null : wholesalePrice,

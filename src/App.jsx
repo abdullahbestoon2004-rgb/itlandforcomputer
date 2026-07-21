@@ -32,8 +32,9 @@ export default function App() {
       const normalized = rawProducts.map((p, index) => ({
         id: p.id || p.zoho_item_id || String(index),
         n: p.name || '',
-        s: p.brand || '',
-        barcode: p.brand || '',
+        sku: p.sku || '',
+        s: p.sku || p.brand || '',
+        barcode: p.barcode || p.brand || p.sku || '',
         p: p.wholesale_price,
         retail: p.price,
         k: Boolean(p.in_stock),

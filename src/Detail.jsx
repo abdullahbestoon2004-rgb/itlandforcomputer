@@ -31,7 +31,10 @@ export default function Detail({ t, item, onBack }) {
               <StockBadge inStock={item.k} t={t} />
             </div>
             <h1 className="detail-title" style={{ margin:'0 0 8px', fontSize:30, lineHeight:1.2, fontWeight:800 }}>{item.n}</h1>
-            <div dir="ltr" style={{ fontSize:13, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', marginBottom:24 }}>{t.code}: {item.barcode}</div>
+            <div dir="ltr" style={{ fontSize:13, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', marginBottom:24, display:'flex', gap:16, flexWrap:'wrap' }}>
+              {item.barcode && <span>{t.code}: {item.barcode}</span>}
+              {item.sku && <span>SKU: {item.sku}</span>}
+            </div>
 
             <div style={{ display:'flex', flexWrap:'wrap', gap:'14px 40px', padding:'20px 0', borderTop:'1.5px dashed #E9DFC9', borderBottom:'1.5px dashed #E9DFC9' }}>
               <div>
