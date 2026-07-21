@@ -24,16 +24,19 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
+  const input = email.toLowerCase().trim();
   const client = clients.find(
-    (c) => c.email.toLowerCase() === email.toLowerCase().trim() && c.password === password,
+    (c) =>
+      (c.email?.toLowerCase().trim() === input || c.username?.toLowerCase().trim() === input) &&
+      c.password === password,
   );
 
   if (!client) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    return res.status(401).json({ error: 'Invalid email/username or password' });
   }
 
   return res.status(200).json({
     success: true,
-    client: { name: client.name, company: client.company ?? null, email: client.email },
+    client: { name: client.name ?? client.username ?? 'Client', company: client.company ?? null, email: client.email ?? client.username },
   });
 }

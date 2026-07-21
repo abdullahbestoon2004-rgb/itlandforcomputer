@@ -150,14 +150,14 @@ http.createServer(async (req, res) => {
     let body = '';
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
-      try {
         const { email, password } = JSON.parse(body);
+        const input = (email || '').toLowerCase().trim();
         const clients = JSON.parse(process.env.WHOLESALE_CLIENTS ?? '[]');
         const client = clients.find(c =>
-          c.email.toLowerCase() === email?.toLowerCase().trim() && c.password === password
+          ((c.email || '').toLowerCase().trim() === input || (c.username || '').toLowerCase().trim() === input) && c.password === password
         );
         if (!client) return json(res, 401, { error: 'Invalid email or password' });
-        json(res, 200, { success: true, client: { name: client.name, company: client.company ?? null, email: client.email } });
+        json(res, 200, { success: true, client: { name: client.name ?? client.username ?? 'Client', company: client.company ?? null, email: client.email ?? client.username } });
       } catch (err) {
         json(res, 500, { error: err.message });
       }
