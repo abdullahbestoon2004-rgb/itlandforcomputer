@@ -1,3 +1,5 @@
+@keyframes spin { to { transform: rotate(360deg); } }
+
 :root { --pri:#FF5436; --acc:#2B4DFF; --cardmin:250px; --cardpad:18px; }
 * { box-sizing:border-box; }
 body { margin:0; }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StockBadge, priceLabel } from './components.jsx';
+import { StockBadge, priceLabel, SmartProductImage } from './components.jsx';
 
 export default function Detail({ t, item, onBack }) {
   const stockColor = item.k ? '#1F9D57' : '#DE3A1E';
@@ -22,11 +22,7 @@ export default function Detail({ t, item, onBack }) {
         <div style={{ background:'#fff', border:'2px solid #17130E', borderRadius:22, boxShadow:'6px 6px 0 #17130E', overflow:'hidden' }}>
           <div style={{ height:8, background:'var(--pri)' }} />
           <div className="detail-card" style={{ padding:'30px 30px 34px' }}>
-            {item.img && (
-              <div className="detail-img" style={{ display:'flex', justifyContent:'center', alignItems:'center', background:'#F9F5EE', borderRadius:14, padding:'24px', marginBottom:28, minHeight:220 }}>
-                <img src={item.img} alt={item.n} style={{ maxHeight:260, maxWidth:'100%', objectFit:'contain' }} />
-              </div>
-            )}
+            <SmartProductImage item={item} height={240} style={{ margin: '0 0 24px', borderRadius: 14 }} />
             <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:10, marginBottom:16 }}>
               <StockBadge inStock={item.k} t={t} />
             </div>

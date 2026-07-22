@@ -238,6 +238,33 @@ function normalizeItem(item, index) {
   };
 }
 
+const imageSearchCache = new Map();
+
+async function getDDGImage(query) {
+  if (imageSearchCache.has(query)) return imageSearchCache.get(query);
+  try {
+    const initRes = await fetch('https://duckduckgo.com/?q=' + encodeURIComponent(query), {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+    });
+    const initText = await initRes.text();
+    const vqdMatch = initText.match(/vqd=[\"']?([^&\"'\s]+)/) || initText.match(/vqd=\"([^\"]+)\"/);
+    if (!vqdMatch) return null;
+    const vqd = vqdMatch[1];
+    const imgRes = await fetch(`https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(query)}&vqd=${vqd}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+    });
+    const imgData = await imgRes.json();
+    if (imgData.results && imgData.results.length > 0) {
+      const imgUrl = imgData.results[0].image;
+      imageSearchCache.set(query, imgUrl);
+      return imgUrl;
+    }
+  } catch (err) {
+    console.error('Image search error:', err.message);
+  }
+  return null;
+}
+
 function json(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(body));
@@ -246,6 +273,14 @@ function json(res, status, body) {
 // ── Server ───────────────────────────────────────────────────────────────────
 http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (url.pathname === '/api/product-image') {
+    const query = url.searchParams.get('q') || url.searchParams.get('query') || '';
+    if (!query) return json(res, 400, { error: 'Missing query' });
+    const img = await getDDGImage(query);
+    if (img) return json(res, 200, { ok: true, img });
+    return json(res, 404, { ok: false, error: 'No image found' });
+  }
 
   if (url.pathname === '/api/products') {
     try {
