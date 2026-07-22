@@ -2,26 +2,65 @@ import React, { useMemo, useState } from 'react';
 import { StockBadge, priceLabel } from './components.jsx';
 import { PAGE } from './i18n.js';
 
-function extractBrand(name) {
-  return (name || '').split(' ')[0] || '';
+const BRAND_ALIASES = {
+  logitech: ['logitech', 'logi', 'ultimate ears', 'ue'],
+  poly: ['poly', 'plantronics', 'polycom'],
+  anker: ['anker', 'eufy', 'soundcore'],
+  jabra: ['jabra'],
+  jbl: ['jbl'],
+  onten: ['onten'],
+  lention: ['lention'],
+};
+
+function matchesBrand(it, targetBrand) {
+  if (!targetBrand) return true;
+  const brandLower = targetBrand.toLowerCase().trim();
+
+  // 1. Direct match on item.brand property
+  if (it.brand && it.brand.toLowerCase().trim() === brandLower) {
+    return true;
+  }
+
+  // 2. Search in product fields using brand aliases
+  const aliases = BRAND_ALIASES[brandLower] || [brandLower];
+  const fullText = `${it.n || ''} ${it.d || ''} ${it.sku || ''} ${it.s || ''} ${it.barcode || ''} ${it.brand || ''}`.toLowerCase();
+
+  return aliases.some(alias => {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(?:^|\\W)${escaped}(?:$|\\W)`, 'i');
+    return regex.test(fullText) || fullText.includes(alias);
+  });
+}
+
+function matchesSearch(it, query) {
+  if (!query) return true;
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+
+  const itemText = `${it.n || ''} ${it.d || ''} ${it.sku || ''} ${it.s || ''} ${it.barcode || ''} ${it.brand || ''} ${it.category || ''}`.toLowerCase();
+
+  return terms.every(term => itemText.includes(term));
 }
 
 const CATEGORIES = [
-  { id: 'mouse',    label: 'Mouse',           keys: ['mouse'] },
-  { id: 'keyboard', label: 'Keyboard',         keys: ['keyboard'] },
-  { id: 'headset',  label: 'Headset',          keys: ['headset', 'headphone', 'earphone', 'blackwire', 'evolve', 'voyager'] },
-  { id: 'adapter',  label: 'Adapter / Hub',    keys: ['hub', 'adapter', 'dock'] },
-  { id: 'mic',      label: 'Microphone',       keys: ['microphone', 'yeti', 'snowball'] },
-  { id: 'speakers', label: 'Speakers',         keys: ['speaker'] },
-  { id: 'stream',   label: 'Streaming',        keys: ['stream deck', 'elgato', 'litra'] },
-  { id: 'video',    label: 'Video Conference', keys: ['webcam', 'conference', 'meetup', 'rally', 'brio', 'streamcam', 'speak2', 'speak 5', 'poly sync', 'tap ip', 'scribe'] },
+  { id: 'mouse',    label: 'Mouse',           keys: ['mouse', 'mice', 'trackball', 'touchpad'] },
+  { id: 'keyboard', label: 'Keyboard',         keys: ['keyboard', 'keypad', 'combo', 'keys'] },
+  { id: 'headset',  label: 'Headset',          keys: ['headset', 'headphone', 'earphone', 'earbuds', 'blackwire', 'evolve', 'voyager', 'zone', 'tune', 'quantum'] },
+  { id: 'adapter',  label: 'Adapter / Hub',    keys: ['hub', 'adapter', 'dock', 'dongle', 'converter', 'multiport'] },
+  { id: 'mic',      label: 'Microphone',       keys: ['microphone', 'mic', 'yeti', 'snowball', 'wave'] },
+  { id: 'speakers', label: 'Speakers',         keys: ['speaker', 'soundbar', 'boombox'] },
+  { id: 'stream',   label: 'Streaming',        keys: ['stream deck', 'elgato', 'litra', 'cam link', 'key light'] },
+  { id: 'video',    label: 'Video Conference', keys: ['webcam', 'cam', 'conference', 'meetup', 'rally', 'brio', 'streamcam', 'speak2', 'speak 5', 'poly sync', 'tap ip', 'scribe', 'vc'] },
 ];
 
 function matchesCategory(it, catId) {
   if (!catId) return true;
   const cat = CATEGORIES.find(c => c.id === catId);
   if (!cat) return true;
-  const text = ((it.n || '') + ' ' + (it.d || '')).toLowerCase();
+  if (it.category && it.category.toLowerCase().includes(catId.toLowerCase())) {
+    return true;
+  }
+  const text = `${it.n || ''} ${it.d || ''} ${it.category || ''}`.toLowerCase();
   return cat.keys.some(k => text.includes(k));
 }
 
@@ -33,15 +72,26 @@ export default function Catalog({
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
 
-  const brands = ['Logitech', 'Anker', 'Onten', 'Lention', 'Poly', 'Jabra', 'JBL'];
+  const brands = useMemo(() => {
+    const defaultBrands = ['Logitech', 'Anker', 'Onten', 'Lention', 'Poly', 'Jabra', 'JBL'];
+    const brandSet = new Set(defaultBrands);
+    (items || []).forEach(it => {
+      if (it.brand && typeof it.brand === 'string') {
+        const b = it.brand.trim();
+        if (b && !Array.from(brandSet).some(existing => existing.toLowerCase() === b.toLowerCase())) {
+          brandSet.add(b);
+        }
+      }
+    });
+    return Array.from(brandSet);
+  }, [items]);
 
   // Pre-filtered (brand + stock + search) — used for category counts
   const preFiltered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return items.filter(it => {
-      if (brand && extractBrand(it.n).toLowerCase() !== brand.toLowerCase()) return false;
+      if (!matchesBrand(it, brand)) return false;
       if (inStockOnly && !it.k) return false;
-      if (q && it.n.toLowerCase().indexOf(q) < 0 && (it.s || '').toLowerCase().indexOf(q) < 0 && (it.barcode || '').toLowerCase().indexOf(q) < 0) return false;
+      if (!matchesSearch(it, query)) return false;
       return true;
     });
   }, [items, query, inStockOnly, brand]);

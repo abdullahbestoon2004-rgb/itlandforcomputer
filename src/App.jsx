@@ -35,6 +35,8 @@ export default function App() {
         sku: p.sku || '',
         s: p.sku || p.brand || '',
         barcode: p.barcode || p.brand || p.sku || '',
+        brand: p.brand || '',
+        category: p.category || '',
         p: p.wholesale_price,
         retail: p.price,
         k: Boolean(p.in_stock),
