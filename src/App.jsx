@@ -18,7 +18,7 @@ export default function App() {
 
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
-  const [inStockOnly, setInStockOnly] = useState(false);
+  const [inStockOnly, setInStockOnly] = useState(true);
   const [visible, setVisible] = useState(PAGE);
   const [selected, setSelected] = useState(null);
 
@@ -87,7 +87,7 @@ export default function App() {
 
   const onLogout = async () => {
     localStorage.removeItem('wholesale_client');
-    setScreen('login'); setQuery(''); setInStockOnly(false); setVisible(PAGE);
+    setScreen('login'); setQuery(''); setInStockOnly(true); setVisible(PAGE);
     setSelected(null); setUser(''); setPass(''); window.scrollTo(0, 0);
   };
 

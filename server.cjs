@@ -53,12 +53,12 @@ let imageFiles = [];
 try { imageFiles = fs.readdirSync(IMAGE_DIR); } catch {}
 
 const BRAND_SYNONYMS = {
-  logitech: ['logitech', 'logi', 'ultimate ears', 'ue', 'blue yeti', 'blue snowball', 'astro'],
+  logitech: ['logitech', 'logi', 'ultimate ears', 'astro', 'blue yeti', 'blue snowball'],
   poly: ['poly', 'plantronics', 'polycom'],
   plantronics: ['poly', 'plantronics', 'polycom'],
-  anker: ['anker', 'soundcore', 'eufy', 'nebula'],
   jabra: ['jabra'],
   jbl: ['jbl'],
+  anker: ['anker', 'soundcore', 'eufy', 'nebula'],
   onten: ['onten'],
   lention: ['lention'],
   dell: ['dell'],
@@ -86,17 +86,18 @@ function findProductImage(item) {
   if (!item || imageFiles.length === 0) return null;
   const rawName = (item.n || item.name || '').trim();
   const rawSku = (item.s || item.sku || '').trim();
+  const rawDesc = (item.description || item.purchase_description || item.d || '').replace(/\s+/g, ' ').trim();
   const rawBrand = (item.brand || '').trim();
 
-  const nameNorm = normalizeString(rawName);
-  const skuNorm = normalizeString(rawSku);
-  const titleText = `${nameNorm} ${skuNorm}`.trim();
-  const titleDense = (rawName + ' ' + rawSku).toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Combine Name, SKU, Description, Purchase Description, Barcode to catch Zoho titles
+  const combinedText = [rawName, rawSku, rawDesc, rawBrand, item.barcode].filter(Boolean).join(' ');
+  const titleText = normalizeString(combinedText);
+  const titleDense = combinedText.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   let productBrand = rawBrand.toLowerCase().trim();
   if (!productBrand) {
     for (const [bKey, aliases] of Object.entries(BRAND_SYNONYMS)) {
-      if (aliases.some(a => matchesWordExact(titleText, a) || titleDense.includes(a.replace(/[^a-z0-9]/g, '')))) {
+      if (aliases.some(a => matchesWordExact(titleText, a))) {
         productBrand = bKey;
         break;
       }
@@ -120,15 +121,16 @@ function findProductImage(item) {
       const isBrandMatch = allowedAliases.some(a => a === imgBrand || BRAND_SYNONYMS[imgBrand]?.includes(a));
       if (!isBrandMatch) continue;
     } else {
-      if (!matchesWordExact(titleText, imgBrand) && !titleDense.includes(imgBrand)) continue;
+      if (!matchesWordExact(titleText, imgBrand)) continue;
     }
 
     let score = 0;
 
-    if (fullModelName && matchesWordExact(titleText, fullModelName)) {
-      score += 300 + fullModelName.length * 10;
-    } else if (modelDense.length >= 4 && titleDense.includes(modelDense)) {
-      score += 300 + modelDense.length * 10;
+    // 1. Exact model dense match in text (e.g. "sync20plus", "speak510uc", "mxmaster3s", "brio4k", "otn9118")
+    if (modelDense.length >= 3 && titleDense.includes(modelDense)) {
+      score += 400 + modelDense.length * 10;
+    } else if (fullModelName && matchesWordExact(titleText, fullModelName)) {
+      score += 350 + fullModelName.length * 10;
     }
 
     let matchedDistinctiveTokens = 0;
@@ -148,16 +150,17 @@ function findProductImage(item) {
             score += 200 + st.length * 5;
             matchedDistinctiveTokens++;
           }
-        } else if (hasDigits && st.length >= 3) {
+        } else if (hasDigits && st.length >= 2) {
+          // Model number with 2+ digits (e.g. "20", "65", "510", "555", "920")
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 100 + st.length * 2;
+            score += 120 + st.length * 5;
             matchedDistinctiveTokens++;
           }
         } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed'].includes(st)) {
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 60 + st.length * 3;
+            score += 70 + st.length * 3;
             matchedDistinctiveTokens++;
           }
         }
@@ -167,10 +170,10 @@ function findProductImage(item) {
     if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === totalDistinctiveTokens) {
       score += 150;
     } else if (totalDistinctiveTokens > 1 && matchedDistinctiveTokens < totalDistinctiveTokens) {
-      score = Math.max(0, score - 120);
+      score = Math.max(0, score - 80);
     }
 
-    if (score >= 120 && score > bestScore) {
+    if (score >= 100 && score > bestScore) {
       bestScore = score;
       bestFile = file;
     }
