@@ -23,7 +23,7 @@ export default function Detail({ t, item, onBack }) {
           <div style={{ height:8, background:'var(--pri)' }} />
           <div className="detail-card" style={{ padding:'30px 30px 34px' }}>
             {item.img && (
-              <div className="detail-img" style={{ display:'flex', justifyContent:'center', alignItems:'center', background:'#F9F5EE', borderRadius:14, padding:'24px', marginBottom:28, minHeight:220 }}>
+              <div className="detail-img" style={{ display:'flex', justifyContent:'center', alignItems:'center', background:'#fff', border:'1px solid #F0ECE1', borderRadius:14, padding:'24px', marginBottom:28, minHeight:220 }}>
                 <img src={item.img} alt={item.n} style={{ maxHeight:260, maxWidth:'100%', objectFit:'contain' }} />
               </div>
             )}

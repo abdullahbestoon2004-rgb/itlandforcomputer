@@ -125,7 +125,7 @@ function EditModal({ item, images, onClose, onSaved }) {
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#8B8071', marginBottom: 10 }}>Image</div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-              <div style={{ width: 96, height: 96, background: '#F9F5EE', borderRadius: 12, border: '1.5px solid #E9DFC9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ width: 96, height: 96, background: '#fff', borderRadius: 12, border: '1.5px solid #E9DFC9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {img
                   ? <img src={img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                   : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D6CDBB" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -350,7 +350,7 @@ export default function Admin({ onBack }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
             {filtered.map(it => (
               <div key={it.id} style={{ background: '#fff', border: '1.5px solid #E9DFC9', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 1px 2px rgba(23,19,14,.05)' }}>
-                <div style={{ height: 110, background: '#F9F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div style={{ height: 110, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {it.img
                     ? <img src={it.img} alt={it.n} style={{ maxHeight: 98, maxWidth: '100%', objectFit: 'contain' }} />
                     : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D6CDBB" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
