@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { StockBadge, priceLabel, SmartProductImage } from './components.jsx';
+import { StockBadge, priceLabel } from './components.jsx';
+import AvailableCarousel from './AvailableCarousel.jsx';
 import { PAGE } from './i18n.js';
 
 const BRAND_ALIASES = {
@@ -210,6 +211,14 @@ export default function Catalog({
 
         {/* Main content */}
         <div style={{ flex:1, padding:'20px 20px 80px', minWidth:0 }}>
+          {/* Top Available Items Carousel */}
+          <AvailableCarousel
+            items={items}
+            loading={loading}
+            onOpen={onOpen}
+            t={t}
+          />
+
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', marginBottom:18 }}>
             <button onClick={() => { setInStockOnly(!on); setVisible(PAGE); }} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'7px 12px 7px 8px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>
               <span style={{ display:'inline-flex', alignItems:'center', width:42, height:25, padding:2, borderRadius:999, background:on?'var(--pri)':'#D6CDBB', justifyContent:on?'flex-end':'flex-start', transition:'background .15s ease', border:'1.5px solid ' + (on?'#17130E':'#C7BDAA') }}>
@@ -227,7 +236,15 @@ export default function Catalog({
               <div className="catalog-grid">
                 {vis.map(it => (
                   <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:0, cursor:'pointer', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
-                    <SmartProductImage item={it} height={130} />
+                    {it.img ? (
+                      <div className="card-img" style={{ height:130, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', background:'#F9F5EE', borderRadius:10, margin:'var(--cardpad)', marginBottom:0, overflow:'hidden' }}>
+                        <img src={it.img} alt={it.n} style={{ maxHeight:'100%', maxWidth:'100%', objectFit:'contain' }} />
+                      </div>
+                    ) : (
+                      <div className="card-img card-img-empty" style={{ height:90, flexShrink:0, alignItems:'center', justifyContent:'center', background:'#F9F5EE', display:'none' }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D6CDBB" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                      </div>
+                    )}
                     <div className="card-content" style={{ padding:'var(--cardpad)', display:'flex', flexDirection:'column', gap:8, flex:1 }}>
                       <div className="card-top" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, minHeight:24 }}>
                         <span className="card-barcode" style={{ fontSize:11, fontFamily:"'Space Mono',ui-monospace,monospace", color:'#8B8071', letterSpacing:'.02em', paddingTop:2 }}>

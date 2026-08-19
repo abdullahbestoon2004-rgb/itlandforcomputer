@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "server": "node server.cjs",
     "prices": "node build-prices.cjs",
+    "fetch-images": "node scripts/auto-fetch-images.js",
     "start": "node server.cjs",
     "build:start": "vite build && node server.cjs"
   },

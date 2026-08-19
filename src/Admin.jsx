@@ -9,9 +9,58 @@ function EditModal({ item, images, onClose, onSaved }) {
   const [price, setPrice] = useState(item.p != null ? String(item.p) : '');
   const [img, setImg] = useState(item.img || '');
   const [showGallery, setShowGallery] = useState(false);
+  const [showOnlineSearch, setShowOnlineSearch] = useState(false);
+  const [onlineResults, setOnlineResults] = useState([]);
+  const [searchingOnline, setSearchingOnline] = useState(false);
+  const [attachingOnline, setAttachingOnline] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(item.n || '');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
+
+  const handleSearchOnline = async (overrideQuery) => {
+    const q = (overrideQuery || searchQuery || name || item.n || item.sku || '').trim();
+    if (!q) return;
+    setSearchingOnline(true);
+    setShowOnlineSearch(true);
+    setShowGallery(false);
+    try {
+      const res = await aapi(`/api/admin/search-images?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      setOnlineResults(data.results || []);
+    } catch {
+      setOnlineResults([]);
+    } finally {
+      setSearchingOnline(false);
+    }
+  };
+
+  const handleAttachOnline = async (cand) => {
+    setAttachingOnline(true);
+    try {
+      const brand = (item.brand || name.split(' ')[0] || 'product').toLowerCase();
+      const cleanName = (name || item.n || 'item').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+      const filename = `${brand}_${cleanName}_${Date.now().toString().slice(-4)}.jpg`;
+
+      const res = await aapi('/api/admin/attach-online-image', {
+        method: 'POST',
+        body: JSON.stringify({
+          itemId: item.id,
+          imageUrl: cand.image,
+          filename: filename,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.img) {
+        setImg(data.img);
+        setShowOnlineSearch(false);
+      }
+    } catch (err) {
+      alert('Failed to attach image: ' + err.message);
+    } finally {
+      setAttachingOnline(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -42,16 +91,18 @@ function EditModal({ item, images, onClose, onSaved }) {
         body: JSON.stringify({ filename: file.name, imageData: ev.target.result }),
       });
       const data = await res.json();
-      if (data.img) { setImg(data.img); setShowGallery(false); }
+      if (data.img) { setImg(data.img); setShowGallery(false); setShowOnlineSearch(false); }
       setUploading(false);
     };
     reader.readAsDataURL(file);
   };
 
-  const btnStyle = (active) => ({
+  const btnStyle = (active, primary) => ({
     padding: '8px 14px', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-    background: active ? '#17130E' : '#fff', color: active ? '#fff' : '#2B2419',
-    border: '1.5px solid ' + (active ? '#17130E' : '#E9DFC9'), borderRadius: 10, cursor: 'pointer',
+    background: primary ? 'var(--pri)' : (active ? '#17130E' : '#fff'),
+    color: primary || active ? '#fff' : '#2B2419',
+    border: '1.5px solid ' + (primary ? 'var(--pri)' : (active ? '#17130E' : '#E9DFC9')),
+    borderRadius: 10, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
   return (
@@ -73,24 +124,65 @@ function EditModal({ item, images, onClose, onSaved }) {
           {/* Image */}
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#8B8071', marginBottom: 10 }}>Image</div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <div style={{ width: 96, height: 96, background: '#F9F5EE', borderRadius: 12, border: '1.5px solid #E9DFC9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {img
                   ? <img src={img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                   : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D6CDBB" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 }
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <button style={btnStyle(showGallery)} onClick={() => setShowGallery(g => !g)}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7, flex: 1, minWidth: 200 }}>
+                <button style={btnStyle(showOnlineSearch, true)} onClick={() => { if (!showOnlineSearch) handleSearchOnline(); setShowOnlineSearch(s => !s); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  {showOnlineSearch ? 'Hide Online Finder' : '🔍 Auto-Find Online'}
+                </button>
+                <button style={btnStyle(showGallery, false)} onClick={() => { setShowGallery(g => !g); setShowOnlineSearch(false); }}>
                   {showGallery ? 'Close Gallery' : 'Pick from Gallery'}
                 </button>
-                <button style={btnStyle(false)} onClick={() => fileRef.current?.click()} disabled={uploading}>
+                <button style={btnStyle(false, false)} onClick={() => fileRef.current?.click()} disabled={uploading}>
                   {uploading ? 'Uploading…' : 'Upload Image'}
                 </button>
-                {img && <button style={{ ...btnStyle(false), color: '#DE3A1E', borderColor: '#F9C5BB' }} onClick={() => setImg('')}>Remove Image</button>}
+                {img && <button style={{ ...btnStyle(false, false), color: '#DE3A1E', borderColor: '#F9C5BB' }} onClick={() => setImg('')}>Remove Image</button>}
                 <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
               </div>
             </div>
+
+            {/* Online Image Search Box */}
+            {showOnlineSearch && (
+              <div style={{ marginTop: 12, padding: 12, background: '#F9F5EE', borderRadius: 14, border: '1.5px solid #E9DFC9' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Search product image online…"
+                    onKeyDown={e => e.key === 'Enter' && handleSearchOnline()}
+                    style={{ flex: 1, padding: '8px 10px', fontSize: 13, fontFamily: 'inherit', border: '1.5px solid #E9DFC9', borderRadius: 8 }}
+                  />
+                  <button onClick={() => handleSearchOnline()} disabled={searchingOnline}
+                    style={{ padding: '8px 12px', fontSize: 12.5, fontWeight: 700, background: '#17130E', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                    {searchingOnline ? '…' : 'Search'}
+                  </button>
+                </div>
+
+                {searchingOnline ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: '#8B8071' }}>Searching online for photos…</div>
+                ) : attachingOnline ? (
+                  <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--pri)', fontWeight: 700 }}>Downloading & saving image…</div>
+                ) : onlineResults.length > 0 ? (
+                  <div style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8 }}>
+                    {onlineResults.map((cand, idx) => (
+                      <div key={idx} onClick={() => handleAttachOnline(cand)} title={cand.title}
+                        style={{ height: 88, background: '#fff', borderRadius: 8, border: '1.5px solid #E9DFC9', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 4, transition: 'border-color .15s' }}>
+                        <img src={cand.thumbnail || cand.image} alt={cand.title} style={{ maxHeight: '78%', maxWidth: '100%', objectFit: 'contain' }} />
+                        <div style={{ fontSize: 9, color: '#8B8071', marginTop: 2 }}>{cand.width}x{cand.height}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: '16px 0', textAlign: 'center', fontSize: 13, color: '#8B8071' }}>No images found. Try editing the search box above.</div>
+                )}
+              </div>
+            )}
 
             {showGallery && (
               <div style={{ marginTop: 12, maxHeight: 210, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(68px, 1fr))', gap: 7, padding: 10, background: '#F9F5EE', borderRadius: 12, border: '1.5px solid #E9DFC9' }}>

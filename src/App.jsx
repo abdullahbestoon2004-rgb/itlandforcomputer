@@ -18,7 +18,7 @@ export default function App() {
 
   const [items, setItems] = useState([]);
   const [query, setQuery] = useState('');
-  const [inStockOnly, setInStockOnly] = useState(true);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [visible, setVisible] = useState(PAGE);
   const [selected, setSelected] = useState(null);
 
