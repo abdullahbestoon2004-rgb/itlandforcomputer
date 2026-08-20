@@ -206,8 +206,20 @@ function findProductImage(item, overrides = {}) {
   const rawDesc = (item.description || item.purchase_description || item.d || '').replace(/\s+/g, ' ').trim();
   const rawBrand = (item.brand || getCustomField(item, 'Brand') || '').trim();
 
-  // Combine Name, SKU, Description, Purchase Description, Barcode to catch Zoho titles
-  const combinedText = [rawName, rawSku, rawDesc, rawBrand, item.barcode].filter(Boolean).join(' ');
+  // Strip price patterns and trailing numbers from text before matching
+  const stripPrices = (str) => {
+    return (str || '')
+      .replace(/(?:office\s+price|wholesale\s+price|retail\s+price|price)\s*[:\(]?\s*\$?\s*\d+(?:[.,]\d+)?\s*\$?\)?\s*[a-z]?/gi, ' ')
+      .replace(/\(\s*\d+\s*\$\s*\)/gi, ' ')
+      .replace(/\$\s*\d+(?:[.,]\d+)?/gi, ' ');
+  };
+
+  const cleanName = stripPrices(rawName);
+  const cleanSku = stripPrices(rawSku);
+  const cleanDesc = stripPrices(rawDesc);
+
+  // Combine clean product title (excluding barcode from dense number searches)
+  const combinedText = [cleanName, cleanSku, cleanDesc, rawBrand].filter(Boolean).join(' ');
   const titleText = normalizeString(combinedText);
   const titleDense = combinedText.toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -222,7 +234,7 @@ function findProductImage(item, overrides = {}) {
     }
   }
 
-  // Extract any explicit model numbers/versions in title (e.g. 2, 3, 3s, 4k, 500, 920)
+  // Extract explicit standalone model versions (e.g. 2, 3, 3s, 4k, 500, 920, 10m, 15m)
   const titleTokens = titleText.split(/\s+/);
   const titleNumbers = titleTokens.filter(t => /\d/.test(t));
 
@@ -268,14 +280,14 @@ function findProductImage(item, overrides = {}) {
         const stDense = st.replace(/[^a-z0-9]/g, '');
 
         if (hasDigits && /[a-z]/.test(st)) {
-          // Alpha-numeric (e.g. 3s, c920, g502, mk270, 770nc)
+          // Alpha-numeric (e.g. 3s, c920, g502, mk270, 770nc, 10m)
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
             score += 250 + st.length * 5;
             matchedDistinctiveTokens++;
           } else {
             const numOnly = st.replace(/[^0-9]/g, '');
-            if (numOnly.length >= 1 && (matchesWordExact(titleText, numOnly) || titleDense.includes(numOnly))) {
+            if (numOnly.length >= 2 && matchesWordExact(titleText, numOnly)) {
               score += 150 + numOnly.length * 5;
               matchedDistinctiveTokens++;
             } else {
@@ -306,7 +318,7 @@ function findProductImage(item, overrides = {}) {
     }
 
     for (const tn of titleNumbers) {
-      if (['2', '3', '4', '6', '4k'].includes(tn)) {
+      if (['2', '3', '4', '6', '4k', '10m', '15m'].includes(tn)) {
         const imageHasNum = modelTokens.some(mt => mt.includes(tn) || mt.replace(/[^a-z0-9]/g, '') === tn);
         if (imageHasNum) {
           score += 100;
@@ -316,6 +328,11 @@ function findProductImage(item, overrides = {}) {
       }
     }
 
+    // Require matching at least 1 distinctive model token to avoid matching brand-only items
+    if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === 0) {
+      continue;
+    }
+
     if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === totalDistinctiveTokens) {
       score += 200;
     } else if (totalDistinctiveTokens > 1 && matchedDistinctiveTokens < totalDistinctiveTokens) {
@@ -323,7 +340,7 @@ function findProductImage(item, overrides = {}) {
     }
 
     // Must exceed confidence threshold
-    if (score >= 100 && score > bestScore) {
+    if (score >= 120 && score > bestScore) {
       bestScore = score;
       bestFile = file;
     }
