@@ -104,6 +104,10 @@ function findProductImage(item) {
     }
   }
 
+  // Extract any explicit model numbers/versions in title (e.g. 2, 3, 3s, 4k, 500, 920)
+  const titleTokens = titleText.split(/\s+/);
+  const titleNumbers = titleTokens.filter(t => /\d/.test(t));
+
   let bestFile = null;
   let bestScore = 0;
 
@@ -126,38 +130,50 @@ function findProductImage(item) {
 
     let score = 0;
 
-    // 1. Exact model dense match in text (e.g. "sync20plus", "speak510uc", "mxmaster3s", "brio4k", "otn9118")
+    // Full dense or word match
     if (modelDense.length >= 3 && titleDense.includes(modelDense)) {
-      score += 400 + modelDense.length * 10;
+      score += 500 + modelDense.length * 10;
     } else if (fullModelName && matchesWordExact(titleText, fullModelName)) {
-      score += 350 + fullModelName.length * 10;
+      score += 450 + fullModelName.length * 10;
     }
 
     let matchedDistinctiveTokens = 0;
     let totalDistinctiveTokens = 0;
+    let mismatchedNumberPenalty = false;
 
     for (const token of modelTokens) {
       const subTokens = token.split(/[^a-z0-9]/).filter(Boolean);
       for (const st of subTokens) {
-        if (st.length <= 1) continue;
+        if (st.length === 0) continue;
         const hasDigits = /\d/.test(st);
         const isAlphaOnly = /^[a-z]+$/.test(st);
         const stDense = st.replace(/[^a-z0-9]/g, '');
 
         if (hasDigits && /[a-z]/.test(st)) {
+          // Alpha-numeric (e.g. 3s, c920, g502, mk270, 770nc)
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 200 + st.length * 5;
+            score += 250 + st.length * 5;
             matchedDistinctiveTokens++;
+          } else {
+            const numOnly = st.replace(/[^0-9]/g, '');
+            if (numOnly.length >= 1 && (matchesWordExact(titleText, numOnly) || titleDense.includes(numOnly))) {
+              score += 150 + numOnly.length * 5;
+              matchedDistinctiveTokens++;
+            } else {
+              mismatchedNumberPenalty = true;
+            }
           }
-        } else if (hasDigits && st.length >= 2) {
-          // Model number with 2+ digits (e.g. "20", "65", "510", "555", "920")
+        } else if (hasDigits) {
+          // Pure number (e.g. 2, 3, 4, 20, 65, 510, 920)
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 120 + st.length * 5;
+            score += (st.length >= 2 ? 150 : 120) + st.length * 5;
             matchedDistinctiveTokens++;
+          } else {
+            mismatchedNumberPenalty = true;
           }
-        } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed'].includes(st)) {
+        } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed', 'dex'].includes(st)) {
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
             score += 70 + st.length * 3;
@@ -167,8 +183,23 @@ function findProductImage(item) {
       }
     }
 
+    if (mismatchedNumberPenalty) {
+      score = Math.max(0, score - 200);
+    }
+
+    for (const tn of titleNumbers) {
+      if (['2', '3', '4', '6', '4k'].includes(tn)) {
+        const imageHasNum = modelTokens.some(mt => mt.includes(tn) || mt.replace(/[^a-z0-9]/g, '') === tn);
+        if (imageHasNum) {
+          score += 100;
+        } else {
+          score = Math.max(0, score - 150);
+        }
+      }
+    }
+
     if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === totalDistinctiveTokens) {
-      score += 150;
+      score += 200;
     } else if (totalDistinctiveTokens > 1 && matchedDistinctiveTokens < totalDistinctiveTokens) {
       score = Math.max(0, score - 80);
     }
