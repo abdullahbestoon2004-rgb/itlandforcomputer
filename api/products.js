@@ -148,9 +148,10 @@ export function findProductImage(item, overrides = {}) {
     return overrides[item.sku].img;
   }
 
-  // 2. Custom field in Zoho
-  const customImg = getCustomField(item, 'Image URL');
-  if (customImg && typeof customImg === 'string' && customImg.startsWith('http')) return customImg;
+  // 2. Ignore the free-form Zoho Image URL field here. It is not model-safe:
+  // the URL can point to a different SKU, while local assets are checked against
+  // the product brand and model tokens below. Use an explicit admin override
+  // when a verified exception is required.
 
   const rawName = (item.name || item.n || '').trim();
   const rawSku = (item.sku || item.s || '').trim();
