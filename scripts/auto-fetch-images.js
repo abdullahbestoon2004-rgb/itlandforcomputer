@@ -216,7 +216,7 @@ export function findMatchingImage(item, imageFiles = []) {
           } else {
             mismatchedNumberPenalty = true;
           }
-        } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed', 'dex'].includes(st)) {
+        } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed'].includes(st)) {
           totalDistinctiveTokens++;
           if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
             score += 70 + st.length * 3;
