@@ -1,5 +1,6 @@
 // Generated from public/assets/product_images. Keep this manifest in sync when adding assets.
 export const LOCAL_IMAGES = [
+  "Anker_555_USB_C_Hub_Official.png",
   "Anker_555_USB_C_Hub.jpg",
   "Anker_PowerExpand_7-in-1.jpg",
   "Dell_WD19S_Dock.jpg",
@@ -12,6 +13,7 @@ export const LOCAL_IMAGES = [
   "Jabra_Speak2_75.jpg",
   "JBL_Flip_6.jpeg",
   "JBL_Tune_770NC.jpg",
+  "Lention_CB-CE18_Official.jpg",
   "Lention_CB-CE18.jpg",
   "Lention_USB_C_Hub.jpg",
   "Logitech_B100.png",

@@ -108,6 +108,13 @@ function getWholesalePrice(item) {
 
 
 
+const VERIFIED_SKU_IMAGES = {
+  cbce18: '/assets/product_images/Lention_CB-CE18_Official.jpg',
+  a83830a1: '/assets/product_images/Anker_555_USB_C_Hub_Official.png',
+  otn9118: '/assets/product_images/Onten_OTN-9118.jpg',
+  '910006628': '/assets/product_images/Logitech_G_Pro_X_Superlight_2.png',
+};
+
 const BRAND_SYNONYMS = {
   logitech: ['logitech', 'logi', 'ultimate ears', 'astro', 'blue yeti', 'blue snowball'],
   poly: ['poly', 'plantronics', 'polycom'],
@@ -148,7 +155,8 @@ export function findProductImage(item, overrides = {}) {
     return overrides[item.sku].img;
   }
 
-  // 2. Ignore the free-form Zoho Image URL field here. It is not model-safe:
+    // 2. Ignore the free-form Zoho Image URL field here. It is not model-safe:
+
   // the URL can point to a different SKU, while local assets are checked against
   // the product brand and model tokens below. Use an explicit admin override
   // when a verified exception is required.
@@ -157,6 +165,8 @@ export function findProductImage(item, overrides = {}) {
   const rawSku = (item.sku || item.s || '').trim();
   const rawDesc = (item.description || item.purchase_description || item.d || '').replace(/\s+/g, ' ').trim();
   const rawBrand = (item.brand || getCustomField(item, 'Brand') || '').trim();
+  const skuKey = normalizeString(rawSku).replace(/\s+/g, '');
+  if (VERIFIED_SKU_IMAGES[skuKey]) return VERIFIED_SKU_IMAGES[skuKey];
 
   // Strip price patterns and trailing numbers from text before matching
   const stripPrices = (str) => {
@@ -382,7 +392,7 @@ const FALLBACK_PRODUCTS = [
     sku: "A83830A1", barcode: "194644023456", brand: "Anker", category: "Adapter / Hub",
     price: 69.99, wholesale_price: 49.99, in_stock: true, stock_on_hand: 40,
     description: "Multiport adapter with 100W Power Delivery, 4K HDMI, Ethernet, and SD card reader.",
-    images: ["/assets/product_images/Anker_555_USB_C_Hub.jpg"]
+    images: ["/assets/product_images/Anker_555_USB_C_Hub_Official.png"]
   },
   {
     id: "4", zoho_item_id: "4", name: "Poly Voyager Focus 2 UC Headset",
@@ -424,14 +434,14 @@ const FALLBACK_PRODUCTS = [
     sku: "CB-CE18", barcode: "6970420180123", brand: "Lention", category: "Adapter / Hub",
     price: 35.00, wholesale_price: 24.50, in_stock: true, stock_on_hand: 45,
     description: "Compact Type-C adapter with 4K HDMI output, 3 USB 3.0 ports, and Power Delivery.",
-    images: ["/assets/product_images/Lention_USB_C_Hub.jpg"]
+    images: ["/assets/product_images/Lention_CB-CE18_Official.jpg"]
   },
   {
     id: "10", zoho_item_id: "10", name: "Logitech G Pro X Superlight 2 Wireless Gaming Mouse",
     sku: "910-006628", barcode: "097855184511", brand: "Logitech", category: "Mouse",
     price: 159.99, wholesale_price: 129.99, in_stock: true, stock_on_hand: 20,
     description: "Next-gen 60g ultralight esports mouse with LIGHTFORCE hybrid switches and HERO 2 sensor.",
-    images: ["/assets/product_images/Logitech_G_Pro_X_Superlight_2_DEX.png"]
+    images: ["/assets/product_images/Logitech_G_Pro_X_Superlight_2.png"]
   },
   {
     id: "11", zoho_item_id: "11", name: "Poly Sync 20 Plus Bluetooth Speakerphone",

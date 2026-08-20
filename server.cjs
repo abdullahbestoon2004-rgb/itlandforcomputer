@@ -52,6 +52,13 @@ const IMAGE_DIR = path.join(__dirname, "public", "assets", "product_images");
 let imageFiles = [];
 try { imageFiles = fs.readdirSync(IMAGE_DIR); } catch {}
 
+const VERIFIED_SKU_IMAGES = {
+  cbce18: '/assets/product_images/Lention_CB-CE18_Official.jpg',
+  a83830a1: '/assets/product_images/Anker_555_USB_C_Hub_Official.png',
+  otn9118: '/assets/product_images/Onten_OTN-9118.jpg',
+  '910006628': '/assets/product_images/Logitech_G_Pro_X_Superlight_2.png',
+};
+
 const BRAND_SYNONYMS = {
   logitech: ['logitech', 'logi', 'ultimate ears', 'astro', 'blue yeti', 'blue snowball'],
   poly: ['poly', 'plantronics', 'polycom'],
@@ -88,6 +95,9 @@ function findProductImage(item) {
   const rawSku = (item.s || item.sku || '').trim();
   const rawDesc = (item.description || item.purchase_description || item.d || '').replace(/\s+/g, ' ').trim();
   const rawBrand = (item.brand || '').trim();
+
+  const skuKey = normalizeString(rawSku).replace(/\s+/g, '');
+  if (VERIFIED_SKU_IMAGES[skuKey]) return VERIFIED_SKU_IMAGES[skuKey];
 
   // Strip price patterns and trailing numbers from text before matching
   const stripPrices = (str) => {
@@ -254,7 +264,7 @@ const FALLBACK_ITEMS = [
     id: "3", n: "Anker 555 USB-C Hub 8-in-1 PowerExpand", s: "A83830A1", barcode: "194644023456",
     brand: "Anker", category: "Adapter / Hub", p: 49.99, retail: 69.99, k: true, stock: 40,
     d: "Multiport adapter with 100W Power Delivery, 4K HDMI, Ethernet, and SD card reader.",
-    img: "/assets/product_images/Anker_555_USB_C_Hub.jpg"
+    img: "/assets/product_images/Anker_555_USB_C_Hub_Official.png"
   },
   {
     id: "4", n: "Poly Voyager Focus 2 UC Headset", s: "213726-01", barcode: "017229172455",
@@ -290,13 +300,13 @@ const FALLBACK_ITEMS = [
     id: "9", n: "Lention USB-C Hub with 4K HDMI", s: "CB-CE18", barcode: "6970420180123",
     brand: "Lention", category: "Adapter / Hub", p: 24.50, retail: 35.00, k: true, stock: 45,
     d: "Compact Type-C adapter with 4K HDMI output, 3 USB 3.0 ports, and Power Delivery.",
-    img: "/assets/product_images/Lention_USB_C_Hub.jpg"
+    img: "/assets/product_images/Lention_CB-CE18_Official.jpg"
   },
   {
     id: "10", n: "Logitech G Pro X Superlight 2 Wireless Gaming Mouse", s: "910-006628", barcode: "097855184511",
     brand: "Logitech", category: "Mouse", p: 129.99, retail: 159.99, k: true, stock: 20,
     d: "Next-gen 60g ultralight esports mouse with LIGHTFORCE hybrid switches and HERO 2 sensor.",
-    img: "/assets/product_images/Logitech_G_Pro_X_Superlight_2_DEX.png"
+    img: "/assets/product_images/Logitech_G_Pro_X_Superlight_2.png"
   },
   {
     id: "11", n: "Poly Sync 20 Plus Bluetooth Speakerphone", s: "216867-01", barcode: "017229171236",
@@ -335,7 +345,8 @@ function getItems() {
       ...it,
       n:   o.n   !== undefined ? o.n   : it.n,
       p:   o.p   !== undefined ? o.p   : it.p,
-      img: o.img !== undefined ? o.img : (autoImg || it.img || null),
+      // Never fall back to an unverified inventory image.
+      img: o.img !== undefined ? o.img : (autoImg || null),
     };
   });
   return { updatedAt: cache.updatedAt || Date.now(), items };
