@@ -41,8 +41,8 @@ const ZOHO_API_DOMAIN       = process.env.ZOHO_API_DOMAIN       || CONFIG.ZOHO_A
 const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLESALE_FIELD;
 const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
 const CLIENTS = CONFIG.CLIENTS || JSON.parse(process.env.WHOLESALE_CLIENTS || process.env.CLIENTS || '[{"username":"itland","email":"itland","password":"itland123","name":"iTLand Client"}]');
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD || "";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD || "admin123";
 
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
 const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
@@ -341,12 +341,41 @@ function getItems() {
   const items = rawList.map(it => {
     const o = ov[it.id] || {};
     const autoImg = findProductImage(it);
+    const stockVal = o.stock !== undefined
+      ? Number(o.stock)
+      : (it.stock != null ? Number(it.stock) : (it.stock_on_hand != null ? Number(it.stock_on_hand) : 0));
+    const inStockVal = o.k !== undefined
+      ? Boolean(o.k)
+      : (o.stock !== undefined ? stockVal > 0 : (it.k !== undefined ? Boolean(it.k) : (it.in_stock !== undefined ? Boolean(it.in_stock) : stockVal > 0)));
+    const wholesaleVal = o.p !== undefined
+      ? (o.p === null ? null : Number(o.p))
+      : (it.p != null ? Number(it.p) : (it.wholesale_price != null ? Number(it.wholesale_price) : null));
+    const retailVal = o.retail !== undefined
+      ? (o.retail === null ? null : Number(o.retail))
+      : (it.retail != null ? Number(it.retail) : (it.price != null ? Number(it.price) : null));
+
     return {
       ...it,
-      n:   o.n   !== undefined ? o.n   : it.n,
-      p:   o.p   !== undefined ? o.p   : it.p,
-      // Never fall back to an unverified inventory image.
-      img: o.img !== undefined ? o.img : (autoImg || null),
+      id:              String(it.id),
+      n:               o.n        !== undefined ? o.n        : (it.n || it.name || ''),
+      name:            o.n        !== undefined ? o.n        : (it.n || it.name || ''),
+      p:               wholesaleVal,
+      wholesale_price: wholesaleVal,
+      retail:          retailVal,
+      price:           retailVal,
+      stock:           stockVal,
+      stock_on_hand:   stockVal,
+      k:               inStockVal,
+      in_stock:        inStockVal,
+      d:               o.d        !== undefined ? o.d        : (it.d || it.description || ''),
+      description:     o.d        !== undefined ? o.d        : (it.d || it.description || ''),
+      brand:           o.brand    !== undefined ? o.brand    : (it.brand || ''),
+      category:        o.category !== undefined ? o.category : (it.category || ''),
+      s:               o.s        !== undefined ? o.s        : (it.s || it.sku || ''),
+      sku:             o.s        !== undefined ? o.s        : (it.s || it.sku || ''),
+      barcode:         o.barcode  !== undefined ? o.barcode  : (it.barcode || ''),
+      // Never fall back to an unverified inventory image
+      img:             o.img      !== undefined ? o.img      : (autoImg || null),
     };
   });
   return { updatedAt: cache.updatedAt || Date.now(), items };
@@ -413,9 +442,135 @@ function loadPriceMap() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function extractWholesalePrice(it, priceMap, rawDesc, pricebookMap) {
+  const cfList = it.custom_fields || [];
+
+  // 1. Explicit WHOLESALE_FIELD if configured
+  if (WHOLESALE_FIELD) {
+    const cf = cfList.find(f => f.api_name === WHOLESALE_FIELD || f.label === WHOLESALE_FIELD);
+    if (cf && cf.value !== "" && cf.value != null) {
+      const v = parseFloat(String(cf.value).replace(/[^0-9.]/g, ''));
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+
+  // 2. Any custom field matching wholesale or office price by label or api_name
+  const cfRegex = /wholesale|office\s*price/i;
+  const cf = cfList.find(f =>
+    cfRegex.test(f.label || '') || cfRegex.test(f.api_name || '')
+  );
+  if (cf && cf.value !== "" && cf.value != null) {
+    const v = parseFloat(String(cf.value).replace(/[^0-9.]/g, ''));
+    if (!isNaN(v) && v > 0) return v;
+  }
+
+  // 3. Custom_field_hash object (Zoho Books v3)
+  if (it.custom_field_hash && typeof it.custom_field_hash === 'object') {
+    for (const [k, val] of Object.entries(it.custom_field_hash)) {
+      if (/wholesale|office/i.test(k) && val != null && val !== '') {
+        const v = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+        if (!isNaN(v) && v > 0) return v;
+      }
+    }
+  }
+
+  // 4. Direct item attributes matching wholesale / office price
+  for (const [k, val] of Object.entries(it)) {
+    if (/^(?:cf_)?(?:wholesale|office_price|wholesale_price|wholesale_rate)$/i.test(k) && val != null && val !== '') {
+      const v = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+
+  // 5. Embedded in description / purchase_description ("Office Price 15.5$" / "Wholesale Price 20$")
+  const fullDesc = `${it.purchase_description || ''} ${it.description || ''} ${rawDesc || ''}`;
+  const m = fullDesc.match(/(?:Office\s+Price|Wholesale\s+Price|Wholesale|Office\s*Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
+  if (m) {
+    const v = parseFloat(m[1].replace(',', '.'));
+    if (!isNaN(v) && v > 0) return v;
+  }
+
+  // 6. Purchase rate (Zoho Books cost / wholesale purchase rate)
+  if (it.purchase_rate != null && Number(it.purchase_rate) > 0) {
+    return Number(it.purchase_rate);
+  }
+
+  // 7. Zoho Pricebook rate if available
+  const idKey = String(it.item_id || it.id || '');
+  if (pricebookMap) {
+    const pVal = pricebookMap[idKey] ?? (it.sku ? pricebookMap[it.sku] : null);
+    if (pVal != null && pVal !== '') {
+      const v = Number(pVal);
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+
+  // 8. Fallback to cached priceMap from wholesale-prices.json
+  if (priceMap) {
+    const mapped = priceMap[idKey] ?? (it.sku ? priceMap[it.sku] : null);
+    if (mapped != null && mapped !== '') {
+      const v = Number(mapped);
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+
+  // 9. Generic price pattern in description e.g. "Price 15$"
+  const m2 = fullDesc.match(/(?:Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
+  if (m2) {
+    const v = parseFloat(m2[1].replace(',', '.'));
+    if (!isNaN(v) && v > 0) return v;
+  }
+
+  return null;
+}
+
+// Fetch active Zoho Pricebooks (Wholesale Price List) if available
+async function fetchPricebooks(token) {
+  try {
+    const url = `${ZOHO_API_DOMAIN}/books/v3/pricebooks?organization_id=${ZOHO_ORG_ID}&status=active`;
+    const res = await fetch(url, { headers: { Authorization: "Zoho-oauthtoken " + token } });
+    if (!res.ok) return {};
+    const data = await res.json();
+    const books = data.pricebooks || [];
+    const targetBook = books.find(b => /wholesale|office/i.test(b.name || '')) || books[0];
+    if (!targetBook) return {};
+
+    const detailUrl = `${ZOHO_API_DOMAIN}/books/v3/pricebooks/${targetBook.pricebook_id}?organization_id=${ZOHO_ORG_ID}`;
+    const dRes = await fetch(detailUrl, { headers: { Authorization: "Zoho-oauthtoken " + token } });
+    if (!dRes.ok) return {};
+    const dData = await dRes.json();
+    const pb = dData.pricebook || {};
+    const map = {};
+    for (const item of (pb.pricebook_items || [])) {
+      if (item.item_id && item.pricebook_rate != null) {
+        map[item.item_id] = Number(item.pricebook_rate);
+      }
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// Fetch individual item detail if custom fields are not returned in list
+async function fetchItemDetail(token, itemId) {
+  try {
+    const url = `${ZOHO_API_DOMAIN}/books/v3/items/${itemId}?organization_id=${ZOHO_ORG_ID}`;
+    const res = await fetch(url, { headers: { Authorization: "Zoho-oauthtoken " + token } });
+    if (res.status === 429) {
+      await sleep(2000);
+      return null;
+    }
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.item || null;
+  } catch {
+    return null;
+  }
+}
+
 // Map a Zoho item to the shape the frontend design expects:
-// { n:name, s:sku, c:category, p:wholesalePrice, k:inStock, d:specs }
-function mapItem(it, priceMap) {
+function mapItem(it, priceMap, pricebookMap) {
   const stock = it.available_stock != null ? it.available_stock
               : (it.stock_on_hand != null ? it.stock_on_hand : 0);
 
@@ -425,30 +580,35 @@ function mapItem(it, priceMap) {
   const nameFromDesc = rawDesc
     .replace(/\s+\d{3,}-\d{4,}.*$/, "")
     .replace(/\s+Office\s+Price.*$/i, "")
+    .replace(/\s+Wholesale\s+Price.*$/i, "")
     .replace(/\s+Price\s+\d.*$/i, "")
     .trim();
 
-  // Wholesale price: custom field → price map → embedded in description ("Office Price 6.4$ E")
-  let wholesale = "";
-  const cf = (it.custom_fields || []).find(f => f.api_name === WHOLESALE_FIELD);
-  if (cf && cf.value !== "" && cf.value != null) wholesale = Number(cf.value);
-  if ((wholesale === "" || isNaN(wholesale)) && priceMap[it.item_id] != null) wholesale = Number(priceMap[it.item_id]);
-  if (wholesale === "" || isNaN(wholesale)) {
-    const m = rawDesc.match(/(?:Office\s+Price|Wholesale\s+Price|Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
-    if (m) wholesale = Number(m[1].replace(",", "."));
-  }
+  const wholesale = extractWholesalePrice(it, priceMap, rawDesc, pricebookMap);
+
+  const brandVal = it.brand || (it.custom_fields || []).find(f => /brand/i.test(f.label || f.api_name || ''))?.value || '';
+  const catVal = it.category_name || it.product_type || (it.custom_fields || []).find(f => /category|type/i.test(f.label || f.api_name || ''))?.value || 'Accessories';
 
   return {
-    id: it.item_id,
+    id: String(it.item_id || it.id || ''),
     n: nameFromDesc || it.name || "",
+    name: nameFromDesc || it.name || "",
     s: it.sku || "",
+    sku: it.sku || "",
     barcode: it.name || "",
+    brand: brandVal,
+    category: catVal,
     c: "all",
-    p: (wholesale === "" || isNaN(wholesale)) ? null : wholesale,
+    p: wholesale,
+    wholesale_price: wholesale,
     retail: it.rate != null ? Number(it.rate) : null,
+    price: it.rate != null ? Number(it.rate) : null,
     k: Number(stock) > 0,
+    in_stock: Number(stock) > 0,
     stock: Number(stock),
+    stock_on_hand: Number(stock),
     d: rawDesc.slice(0, 120),
+    description: rawDesc,
   };
 }
 
@@ -458,11 +618,65 @@ async function syncNow() {
   }
   try {
     console.log(new Date().toISOString(), "Syncing from Zoho...");
+    const token = await getAccessToken();
     const raw = await fetchAllItems();
-    const priceMap = loadPriceMap();
-    const items = raw.map(it => mapItem(it, priceMap));
+    let priceMap = loadPriceMap();
+    let priceMapDirty = false;
+
+    let pricebookMap = {};
+    try {
+      pricebookMap = await fetchPricebooks(token);
+    } catch {}
+
+    const itemsMissingPrice = [];
+
+    const items = raw.map(it => {
+      const mapped = mapItem(it, priceMap, pricebookMap);
+      if (mapped.p != null && mapped.id) {
+        if (priceMap[mapped.id] !== mapped.p) {
+          priceMap[mapped.id] = mapped.p;
+          priceMapDirty = true;
+        }
+      } else {
+        itemsMissingPrice.push(it);
+      }
+      return mapped;
+    });
+
+    // If some items lack wholesale price because list endpoint lacks custom fields,
+    // fetch up to 15 item details per sync cycle to enrich them automatically
+    if (itemsMissingPrice.length > 0) {
+      const toEnrich = itemsMissingPrice.slice(0, 15);
+      for (const rawIt of toEnrich) {
+        const id = rawIt.item_id || rawIt.id;
+        if (!id) continue;
+        const detail = await fetchItemDetail(token, id);
+        if (detail) {
+          const detailPrice = extractWholesalePrice(detail, priceMap, rawIt.purchase_description || rawIt.description, pricebookMap);
+          if (detailPrice != null) {
+            priceMap[String(id)] = detailPrice;
+            priceMapDirty = true;
+            const foundIdx = items.findIndex(i => String(i.id) === String(id));
+            if (foundIdx !== -1) {
+              items[foundIdx].p = detailPrice;
+              items[foundIdx].wholesale_price = detailPrice;
+            }
+          }
+        }
+        await sleep(150);
+      }
+    }
+
+    if (priceMapDirty) {
+      try {
+        fs.writeFileSync(path.join(__dirname, "wholesale-prices.json"), JSON.stringify(priceMap, null, 2));
+      } catch (err) {
+        console.warn("Could not save wholesale-prices.json:", err.message);
+      }
+    }
+
     fs.writeFileSync(CACHE_FILE, JSON.stringify({ updatedAt: Date.now(), items }, null, 0));
-    console.log(`  cached ${items.length} items (${items.filter(i=>i.k).length} in stock)`);
+    console.log(`  cached ${items.length} items (${items.filter(i=>i.k).length} in stock, ${items.filter(i=>i.p != null).length} with wholesale price)`);
   } catch (e) {
     console.error("  sync failed:", e.message);
   }
@@ -566,7 +780,9 @@ const server = http.createServer(async (req, res) => {
   // ---- API: products / items ----
   if (pathn === "/api/products" || pathn === "/api/items") {
     const data = getItems();
-    send(res, 200, { updatedAt: data.updatedAt, products: data.items, items: data.items });
+    send(res, 200, { updatedAt: data.updatedAt, products: data.items, items: data.items }, {
+      "Cache-Control": "no-cache, no-store, must-revalidate"
+    });
     return;
   }
 
@@ -613,16 +829,44 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     let data = {};
     try { data = JSON.parse(body); } catch {}
-    const { itemId, n, p, img } = data;
+    const { itemId, reset, n, p, wholesale_price, retail, price, stock, quantity, k, in_stock, d, description, brand, category, sku, s, barcode, img } = data;
     if (!itemId) { send(res, 400, { error: "itemId required" }); return; }
     const overrides = loadOverrides();
+    if (reset) {
+      delete overrides[itemId];
+      saveOverrides(overrides);
+      send(res, 200, { ok: true, reset: true });
+      return;
+    }
     if (!overrides[itemId]) overrides[itemId] = {};
-    if (n === null) delete overrides[itemId].n; else if (n !== undefined) overrides[itemId].n = n;
-    if (p === null) delete overrides[itemId].p; else if (p !== undefined) overrides[itemId].p = p;
-    if (img === null) delete overrides[itemId].img; else if (img !== undefined) overrides[itemId].img = img;
+
+    const finalP = p !== undefined ? p : wholesale_price;
+    const finalRetail = retail !== undefined ? retail : price;
+    const finalStock = stock !== undefined ? stock : quantity;
+    const finalK = k !== undefined ? k : in_stock;
+    const finalD = d !== undefined ? d : description;
+    const finalS = s !== undefined ? s : sku;
+
+    const setOrDelete = (field, value) => {
+      if (value === null) delete overrides[itemId][field];
+      else if (value !== undefined) overrides[itemId][field] = value;
+    };
+
+    setOrDelete('n', n);
+    setOrDelete('p', finalP === null ? null : (finalP !== undefined ? Number(finalP) : undefined));
+    setOrDelete('retail', finalRetail === null ? null : (finalRetail !== undefined ? Number(finalRetail) : undefined));
+    setOrDelete('stock', finalStock === null ? null : (finalStock !== undefined ? Number(finalStock) : undefined));
+    setOrDelete('k', finalK === null ? null : (finalK !== undefined ? Boolean(finalK) : undefined));
+    setOrDelete('d', finalD);
+    setOrDelete('brand', brand);
+    setOrDelete('category', category);
+    setOrDelete('s', finalS);
+    setOrDelete('barcode', barcode);
+    setOrDelete('img', img);
+
     if (Object.keys(overrides[itemId]).length === 0) delete overrides[itemId];
     saveOverrides(overrides);
-    send(res, 200, { ok: true });
+    send(res, 200, { ok: true, item: overrides[itemId] || null });
     return;
   }
 

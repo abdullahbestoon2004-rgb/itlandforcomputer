@@ -85,20 +85,33 @@ function getWholesalePrice(item) {
     if (!isNaN(parsed) && parsed > 0) return parsed;
   }
 
-  // 2. Regex in description or purchase description ("Office Price 15.5$" or "Wholesale Price 20$")
+  // 2. Custom_field_hash object
+  if (item.custom_field_hash && typeof item.custom_field_hash === 'object') {
+    for (const [k, val] of Object.entries(item.custom_field_hash)) {
+      if (/wholesale|office/i.test(k) && val != null && val !== '') {
+        const v = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+        if (!isNaN(v) && v > 0) return v;
+      }
+    }
+  }
+
+  // 3. Direct item attributes matching wholesale / office price
+  for (const [k, val] of Object.entries(item)) {
+    if (/^(?:cf_)?(?:wholesale|office_price|wholesale_price|wholesale_rate)$/i.test(k) && val != null && val !== '') {
+      const v = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+      if (!isNaN(v) && v > 0) return v;
+    }
+  }
+
+  // 4. Regex in description or purchase description ("Office Price 15.5$" or "Wholesale Price 20$")
   const desc = `${item.description ?? ''} ${item.purchase_description ?? ''}`;
-  const match = desc.match(/(?:Office\s+Price|Wholesale\s+Price|Wholesale|Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
+  const match = desc.match(/(?:Office\s+Price|Wholesale\s+Price|Wholesale|Office\s*Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
   if (match) {
     const parsed = parseFloat(match[1].replace(',', '.'));
     if (!isNaN(parsed) && parsed > 0) return parsed;
   }
 
-  // 3. Fallback to rate (item price in Zoho Books)
-  if (item.rate != null && Number(item.rate) > 0) {
-    return Number(item.rate);
-  }
-
-  // 4. Fallback to purchase_rate
+  // 5. Fallback to purchase_rate (cost / wholesale rate in Zoho Books)
   if (item.purchase_rate != null && Number(item.purchase_rate) > 0) {
     return Number(item.purchase_rate);
   }
@@ -337,24 +350,43 @@ export function normalizeItem(item, index, overrides = {}) {
   // Apply admin overrides if present
   const ov = overrides[itemId] || {};
 
+  const stockVal = ov.stock !== undefined ? Number(ov.stock) : (stockOnHand ?? item.stock ?? 0);
+  const inStockVal = ov.k !== undefined ? Boolean(ov.k) : (ov.stock !== undefined ? stockVal > 0 : (stockOnHand === null || stockOnHand > 0 || Boolean(item.in_stock || item.k)));
+  const wholesaleVal = ov.p !== undefined ? (ov.p === null ? null : Number(ov.p)) : (wholesalePrice ?? (item.p != null ? Number(item.p) : (item.wholesale_price != null ? Number(item.wholesale_price) : null)));
+  const retailVal = ov.retail !== undefined ? (ov.retail === null ? null : Number(ov.retail)) : Number(item.rate ?? item.retail ?? item.price ?? 0);
+  const nameVal = ov.n != null ? ov.n : modelName;
+  const descVal = ov.d != null ? ov.d : rawDesc;
+  const brandVal = ov.brand != null ? ov.brand : ((getCustomField(item, 'Brand') || item.brand) ?? '');
+  const categoryVal = ov.category != null ? ov.category : (item.product_type ?? item.category ?? 'Accessories');
+  const skuVal = ov.s != null ? ov.s : (ov.sku != null ? ov.sku : rawSku);
+  const barcodeVal = ov.barcode != null ? ov.barcode : barcode;
+  const imgList = ov.img !== undefined ? (ov.img ? [ov.img] : []) : (matchedImage ? [matchedImage] : []);
+  const imgVal = imgList[0] || null;
+
   return {
     id: itemId,
     zoho_item_id: itemId,
-    name: ov.n != null ? ov.n : modelName,
-    sku: rawSku,
-    barcode: barcode,
-    description: rawDesc,
-    price: Number(item.rate ?? item.price ?? 0),
-    wholesale_price: ov.p !== undefined ? ov.p : wholesalePrice,
-    category: item.product_type ?? item.category ?? 'Accessories',
-    brand: (getCustomField(item, 'Brand') || item.brand) ?? '',
-    // Only expose an image after it passes the model matcher; an unverified
-    // Zoho image can belong to a different SKU and must not be shown.
-    images: ov.img !== undefined ? (ov.img ? [ov.img] : []) : (matchedImage ? [matchedImage] : []),
+    n: nameVal,
+    name: nameVal,
+    sku: skuVal,
+    s: skuVal,
+    barcode: barcodeVal,
+    d: descVal,
+    description: descVal,
+    price: retailVal,
+    retail: retailVal,
+    wholesale_price: wholesaleVal,
+    p: wholesaleVal,
+    category: categoryVal,
+    brand: brandVal,
+    images: imgList,
+    img: imgVal,
     featured: getCustomField(item, 'Featured')?.toLowerCase() === 'true',
     order_index: index,
-    stock_on_hand: stockOnHand ?? item.stock ?? null,
-    in_stock: stockOnHand === null || stockOnHand > 0 || Boolean(item.in_stock || item.k),
+    stock_on_hand: stockVal,
+    stock: stockVal,
+    in_stock: inStockVal,
+    k: inStockVal,
   };
 }
 

@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function Login({ t, user, setUser, pass, setPass, error, loading, onLogin }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column' }}>
       <div style={{ height:4, background:'var(--pri)' }} />
@@ -16,17 +18,54 @@ export default function Login({ t, user, setUser, pass, setPass, error, loading,
             className="inp" type="email" value={user} dir="ltr"
             onChange={e => setUser(e.target.value)}
             placeholder={t.usernamePh}
-            style={{ width:'100%', padding:'13px 14px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, marginBottom:16 }}
+            style={{ width:'100%', padding:'13px 14px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, marginBottom:16, boxSizing:'border-box' }}
           />
 
           <label style={{ display:'block', fontSize:13.5, fontWeight:700, color:'#2B2419', marginBottom:7 }}>{t.password}</label>
-          <input
-            className="inp" type="password" value={pass}
-            onChange={e => setPass(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') onLogin(); }}
-            placeholder={t.passwordPh}
-            style={{ width:'100%', padding:'13px 14px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, marginBottom:8 }}
-          />
+          <div style={{ position:'relative', width:'100%', marginBottom:8 }}>
+            <input
+              className="inp" type={showPassword ? 'text' : 'password'} value={pass}
+              onChange={e => setPass(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onLogin(); }}
+              placeholder={t.passwordPh}
+              style={{ width:'100%', padding:'13px 44px 13px 14px', fontSize:16, fontFamily:'inherit', color:'#17130E', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, boxSizing:'border-box' }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#776E62',
+                borderRadius: 6,
+                transition: 'color 0.15s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#17130E'}
+              onMouseLeave={e => e.currentTarget.style.color = '#776E62'}
+            >
+              {showPassword ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                  <line x1="1" y1="23" x2="23" y2="1"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              )}
+            </button>
+          </div>
 
           {error && <div style={{ fontSize:13.5, color:'#DE3A1E', fontWeight:600, margin:'2px 0 12px' }}>{t.loginError}</div>}
 

@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { StockBadge, priceLabel } from './components.jsx';
-import AvailableCarousel from './AvailableCarousel.jsx';
 import { PAGE } from './i18n.js';
 
 const BRAND_ALIASES = {
@@ -67,11 +66,12 @@ function matchesCategory(it, catId) {
 
 export default function Catalog({
   t, items, loading,
-  query, setQuery, inStockOnly, setInStockOnly,
+  query, setQuery,
+  brand, setBrand,
+  category, setCategory,
+  inStockOnly, setInStockOnly,
   visible, setVisible, onLogout, onOpen, onAdminClick,
 }) {
-  const [brand, setBrand] = useState('');
-  const [category, setCategory] = useState('');
 
   const brands = useMemo(() => {
     const defaultBrands = ['Logitech', 'Anker', 'Onten', 'Lention', 'Poly', 'Jabra', 'JBL'];
@@ -211,14 +211,6 @@ export default function Catalog({
 
         {/* Main content */}
         <div style={{ flex:1, padding:'20px 20px 80px', minWidth:0 }}>
-          {/* Top Available Items Carousel */}
-          <AvailableCarousel
-            items={items}
-            loading={loading}
-            onOpen={onOpen}
-            t={t}
-          />
-
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap', marginBottom:18 }}>
             <button onClick={() => { setInStockOnly(!on); setVisible(PAGE); }} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'7px 12px 7px 8px', background:'transparent', border:'none', cursor:'pointer', fontFamily:'inherit' }}>
               <span style={{ display:'inline-flex', alignItems:'center', width:42, height:25, padding:2, borderRadius:999, background:on?'var(--pri)':'#D6CDBB', justifyContent:on?'flex-end':'flex-start', transition:'background .15s ease', border:'1.5px solid ' + (on?'#17130E':'#C7BDAA') }}>
