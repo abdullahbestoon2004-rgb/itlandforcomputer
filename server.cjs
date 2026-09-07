@@ -40,7 +40,8 @@ const ZOHO_ACCOUNTS_DOMAIN  = process.env.ZOHO_ACCOUNTS_DOMAIN  || CONFIG.ZOHO_A
 const ZOHO_API_DOMAIN       = process.env.ZOHO_API_DOMAIN       || CONFIG.ZOHO_API_DOMAIN || 'https://www.zohoapis.com';
 const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLESALE_FIELD;
 const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
-const CLIENTS = CONFIG.CLIENTS || JSON.parse(process.env.WHOLESALE_CLIENTS || process.env.CLIENTS || '[{"username":"itland","email":"itland","password":"itland123","name":"iTLand Client"}]');
+const { loadClients, findClient, toClientProfile } = require("./lib/clients.js");
+const CLIENTS = CONFIG.CLIENTS || loadClients(process.env);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD || "admin123";
 
@@ -50,195 +51,26 @@ const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
 // ============ image matching ============
 const IMAGE_DIR = path.join(__dirname, "public", "assets", "product_images");
 let imageFiles = [];
-try { imageFiles = fs.readdirSync(IMAGE_DIR); } catch {}
+try {
+  const all = fs.readdirSync(IMAGE_DIR);
+  // Product art is served as WebP (see README). Legacy .jpg/.png originals may
+  // still sit in the directory; prefer the WebP twin so the matcher never hands
+  // the browser a multi-megabyte original, and keep an original only when no
+  // WebP version of it exists.
+  const webpStems = new Set(
+    all.filter(f => /\.webp$/i.test(f)).map(f => f.replace(/\.[^.]+$/, ''))
+  );
+  imageFiles = all.filter(f =>
+    /\.webp$/i.test(f) || !webpStems.has(f.replace(/\.[^.]+$/, ''))
+  );
+} catch {}
 
-const VERIFIED_SKU_IMAGES = {
-  cbce18: '/assets/product_images/Lention_CB-CE18_Official.jpg',
-  a83830a1: '/assets/product_images/Anker_555_USB_C_Hub_Official.png',
-  otn9118: '/assets/product_images/Onten_OTN-9118.jpg',
-  '910006628': '/assets/product_images/Logitech_G_Pro_X_Superlight_2.png',
-};
-
-const BRAND_SYNONYMS = {
-  logitech: ['logitech', 'logi', 'ultimate ears', 'astro', 'blue yeti', 'blue snowball'],
-  poly: ['poly', 'plantronics', 'polycom'],
-  plantronics: ['poly', 'plantronics', 'polycom'],
-  jabra: ['jabra'],
-  jbl: ['jbl'],
-  anker: ['anker', 'soundcore', 'eufy', 'nebula'],
-  onten: ['onten'],
-  lention: ['lention'],
-  dell: ['dell'],
-  elgato: ['elgato'],
-  razer: ['razer'],
-  samsung: ['samsung'],
-  sandisk: ['sandisk'],
-  ugreen: ['ugreen'],
-  vention: ['vention'],
-  dm: ['dm'],
-};
-
-function normalizeString(str) {
-  return (str || '').toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function matchesWordExact(text, word) {
-  if (!text || !word) return false;
-  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const reg = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, 'i');
-  return reg.test(text);
-}
-
-function findProductImage(item) {
-  if (!item || imageFiles.length === 0) return null;
-  const rawName = (item.n || item.name || '').trim();
-  const rawSku = (item.s || item.sku || '').trim();
-  const rawDesc = (item.description || item.purchase_description || item.d || '').replace(/\s+/g, ' ').trim();
-  const rawBrand = (item.brand || '').trim();
-
-  const skuKey = normalizeString(rawSku).replace(/\s+/g, '');
-  if (VERIFIED_SKU_IMAGES[skuKey]) return VERIFIED_SKU_IMAGES[skuKey];
-
-  // Strip price patterns and trailing numbers from text before matching
-  const stripPrices = (str) => {
-    return (str || '')
-      .replace(/(?:office\s+price|wholesale\s+price|retail\s+price|price)\s*[:\(]?\s*\$?\s*\d+(?:[.,]\d+)?\s*\$?\)?\s*[a-z]?/gi, ' ')
-      .replace(/\(\s*\d+\s*\$\s*\)/gi, ' ')
-      .replace(/\$\s*\d+(?:[.,]\d+)?/gi, ' ');
-  };
-
-  const cleanName = stripPrices(rawName);
-  const cleanSku = stripPrices(rawSku);
-  const cleanDesc = stripPrices(rawDesc);
-
-  // Combine clean product title (excluding barcode from dense number searches)
-  const combinedText = [cleanName, cleanSku, cleanDesc, rawBrand].filter(Boolean).join(' ');
-  const titleText = normalizeString(combinedText);
-  const titleDense = combinedText.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-  let productBrand = rawBrand.toLowerCase().trim();
-  if (!productBrand) {
-    for (const [bKey, aliases] of Object.entries(BRAND_SYNONYMS)) {
-      if (aliases.some(a => matchesWordExact(titleText, a))) {
-        productBrand = bKey;
-        break;
-      }
-    }
-  }
-
-  // Extract explicit standalone model versions (e.g. 2, 3, 3s, 4k, 500, 920, 10m, 15m)
-  const titleTokens = titleText.split(/\s+/);
-  const titleNumbers = titleTokens.filter(t => /\d/.test(t));
-
-  let bestFile = null;
-  let bestScore = 0;
-
-  for (const file of imageFiles) {
-    const rawNoExt = file.replace(/\.[^.]+$/, '');
-    const parts = rawNoExt.split('_');
-    const imgBrand = parts[0].toLowerCase();
-    const modelTokens = parts.slice(1).map(p => p.toLowerCase());
-    const fullModelName = modelTokens.join(' ');
-    const modelDense = fullModelName.replace(/[^a-z0-9]/g, '');
-
-    // Strict Brand Match: skip if brand is mismatched
-    if (productBrand) {
-      const allowedAliases = BRAND_SYNONYMS[productBrand] || [productBrand];
-      const isBrandMatch = allowedAliases.some(a => a === imgBrand || BRAND_SYNONYMS[imgBrand]?.includes(a));
-      if (!isBrandMatch) continue;
-    } else {
-      if (!matchesWordExact(titleText, imgBrand)) continue;
-    }
-
-    let score = 0;
-
-    // Full dense or word match
-    if (modelDense.length >= 3 && titleDense.includes(modelDense)) {
-      score += 500 + modelDense.length * 10;
-    } else if (fullModelName && matchesWordExact(titleText, fullModelName)) {
-      score += 450 + fullModelName.length * 10;
-    }
-
-    let matchedDistinctiveTokens = 0;
-    let totalDistinctiveTokens = 0;
-    let mismatchedNumberPenalty = false;
-
-    for (const token of modelTokens) {
-      const subTokens = token.split(/[^a-z0-9]/).filter(Boolean);
-      for (const st of subTokens) {
-        if (st.length === 0) continue;
-        const hasDigits = /\d/.test(st);
-        const isAlphaOnly = /^[a-z]+$/.test(st);
-        const stDense = st.replace(/[^a-z0-9]/g, '');
-
-        if (hasDigits && /[a-z]/.test(st)) {
-          // Alpha-numeric (e.g. 3s, c920, g502, mk270, 770nc, 10m)
-          totalDistinctiveTokens++;
-          if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 250 + st.length * 5;
-            matchedDistinctiveTokens++;
-          } else {
-            const numOnly = st.replace(/[^0-9]/g, '');
-            if (numOnly.length >= 2 && matchesWordExact(titleText, numOnly)) {
-              score += 150 + numOnly.length * 5;
-              matchedDistinctiveTokens++;
-            } else {
-              mismatchedNumberPenalty = true;
-            }
-          }
-        } else if (hasDigits) {
-          // Pure number (e.g. 2, 3, 4, 20, 65, 510, 920)
-          totalDistinctiveTokens++;
-          if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += (st.length >= 2 ? 150 : 120) + st.length * 5;
-            matchedDistinctiveTokens++;
-          } else {
-            mismatchedNumberPenalty = true;
-          }
-        } else if (isAlphaOnly && st.length >= 3 && !['plus', 'silent', 'pro', 'max', 'wireless', 'bluetooth', 'lightspeed', 'dex'].includes(st)) {
-          totalDistinctiveTokens++;
-          if (matchesWordExact(titleText, st) || titleDense.includes(stDense)) {
-            score += 70 + st.length * 3;
-            matchedDistinctiveTokens++;
-          }
-        }
-      }
-    }
-
-    if (mismatchedNumberPenalty) {
-      score = Math.max(0, score - 200);
-    }
-
-    for (const tn of titleNumbers) {
-      if (['2', '3', '4', '6', '4k', '10m', '15m'].includes(tn)) {
-        const imageHasNum = modelTokens.some(mt => mt.includes(tn) || mt.replace(/[^a-z0-9]/g, '') === tn);
-        if (imageHasNum) {
-          score += 100;
-        } else {
-          score = Math.max(0, score - 150);
-        }
-      }
-    }
-
-    // Require matching at least 1 distinctive model token to avoid matching brand-only items
-    if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === 0) {
-      continue;
-    }
-
-    if (totalDistinctiveTokens > 0 && matchedDistinctiveTokens === totalDistinctiveTokens) {
-      score += 200;
-    } else if (totalDistinctiveTokens > 1 && matchedDistinctiveTokens < totalDistinctiveTokens) {
-      score = Math.max(0, score - 80);
-    }
-
-    if (score >= 120 && score > bestScore) {
-      bestScore = score;
-      bestFile = file;
-    }
-  }
-
-  return bestFile ? `/assets/product_images/${bestFile}` : null;
-}
+// Image matching + item normalization live in lib/product-matching.js so this
+// server, the local API server, and the Vercel functions score identically.
+// imageFiles is passed as a getter because the admin upload routes append to it
+// at runtime (see /api/admin/upload-image below).
+const { createMatcher } = require("./lib/product-matching.js");
+const { findProductImage } = createMatcher(() => imageFiles);
 
 const OVERRIDES_FILE = path.join(__dirname, "overrides.json");
 function loadOverrides() {
@@ -252,92 +84,93 @@ const FALLBACK_ITEMS = [
     id: "1", n: "Logitech MX Master 3S Wireless Mouse", s: "910-006557", barcode: "097855174574",
     brand: "Logitech", category: "Mouse", p: 79.99, retail: 99.99, k: true, stock: 25,
     d: "Quiet Click wireless performance mouse with 8K DPI tracking and ergonomic design.",
-    img: "/assets/product_images/Logitech_MX_Master_3S.jpg"
+    img: "/assets/product_images/Logitech_MX_Master_3S.webp"
   },
   {
     id: "2", n: "Logitech MX Keys S Wireless Keyboard", s: "920-011558", barcode: "097855174581",
     brand: "Logitech", category: "Keyboard", p: 94.99, retail: 119.99, k: true, stock: 18,
     d: "Fluid typing illuminated keyboard with Smart Actions and USB-C fast charging.",
-    img: "/assets/product_images/Logitech_MX_Keys_S.jpg"
+    img: "/assets/product_images/Logitech_MX_Keys_S.webp"
   },
   {
     id: "3", n: "Anker 555 USB-C Hub 8-in-1 PowerExpand", s: "A83830A1", barcode: "194644023456",
     brand: "Anker", category: "Adapter / Hub", p: 49.99, retail: 69.99, k: true, stock: 40,
     d: "Multiport adapter with 100W Power Delivery, 4K HDMI, Ethernet, and SD card reader.",
-    img: "/assets/product_images/Anker_555_USB_C_Hub_Official.png"
+    img: "/assets/product_images/Anker_555_USB_C_Hub_Official.webp"
   },
   {
     id: "4", n: "Poly Voyager Focus 2 UC Headset", s: "213726-01", barcode: "017229172455",
     brand: "Poly", category: "Headset", p: 199.99, retail: 249.99, k: true, stock: 12,
     d: "Stereo Bluetooth headset with active noise canceling (ANC) and smart sensors.",
-    img: "/assets/product_images/Poly_Voyager_Focus_2.jpg"
+    img: "/assets/product_images/Poly_Voyager_Focus_2.webp"
   },
   {
     id: "5", n: "Jabra Evolve2 65 Wireless Headset", s: "26599-989-999", barcode: "5706991022835",
     brand: "Jabra", category: "Headset", p: 175.00, retail: 219.99, k: true, stock: 15,
     d: "Professional wireless headset engineered to keep you focused with noise isolating foam.",
-    img: "/assets/product_images/Jabra_Evolve2_65.jpg"
+    img: "/assets/product_images/Jabra_Evolve2_65.webp"
   },
   {
     id: "6", n: "JBL Flip 6 Portable Waterproof Speaker", s: "JBLFLIP6BLKAM", barcode: "050036387063",
     brand: "JBL", category: "Speakers", p: 98.50, retail: 129.95, k: true, stock: 30,
     d: "Powerful 2-way speaker system delivering loud, crystal clear, powerful sound.",
-    img: "/assets/product_images/JBL_Flip_6.jpeg"
+    img: "/assets/product_images/JBL_Flip_6.webp"
   },
   {
     id: "7", n: "Logitech Brio 4K Ultra HD Webcam", s: "960-001105", barcode: "097855125439",
     brand: "Logitech", category: "Video Conference", p: 155.00, retail: 199.99, k: true, stock: 10,
     d: "Premium 4K webcam with HDR and Windows Hello support for professional video calls.",
-    img: "/assets/product_images/Logitech_Brio_4K.png"
+    img: "/assets/product_images/Logitech_Brio_4K.webp"
   },
   {
     id: "8", n: "Onten 9118 USB-C Multiport Docking Station", s: "OTN-9118", barcode: "6956328391181",
     brand: "Onten", category: "Adapter / Hub", p: 32.00, retail: 45.00, k: true, stock: 50,
     d: "Aluminum 11-in-1 USB-C dock with dual HDMI, VGA, RJ45 Gigabit Ethernet and USB 3.0 ports.",
-    img: "/assets/product_images/Onten_OTN-9118.jpg"
+    img: "/assets/product_images/Onten_OTN-9118.webp"
   },
   {
     id: "9", n: "Lention USB-C Hub with 4K HDMI", s: "CB-CE18", barcode: "6970420180123",
     brand: "Lention", category: "Adapter / Hub", p: 24.50, retail: 35.00, k: true, stock: 45,
     d: "Compact Type-C adapter with 4K HDMI output, 3 USB 3.0 ports, and Power Delivery.",
-    img: "/assets/product_images/Lention_CB-CE18_Official.jpg"
+    img: "/assets/product_images/Lention_CB-CE18_Official.webp"
   },
   {
     id: "10", n: "Logitech G Pro X Superlight 2 Wireless Gaming Mouse", s: "910-006628", barcode: "097855184511",
     brand: "Logitech", category: "Mouse", p: 129.99, retail: 159.99, k: true, stock: 20,
     d: "Next-gen 60g ultralight esports mouse with LIGHTFORCE hybrid switches and HERO 2 sensor.",
-    img: "/assets/product_images/Logitech_G_Pro_X_Superlight_2.png"
+    img: "/assets/product_images/Logitech_G_Pro_X_Superlight_2.webp"
   },
   {
     id: "11", n: "Poly Sync 20 Plus Bluetooth Speakerphone", s: "216867-01", barcode: "017229171236",
     brand: "Poly", category: "Video Conference", p: 139.00, retail: 179.99, k: true, stock: 16,
     d: "Smart speakerphone for conference calls and music with multi-microphone steerable array.",
-    img: "/assets/product_images/Poly_Sync_20_Plus.jpg"
+    img: "/assets/product_images/Poly_Sync_20_Plus.webp"
   },
   {
     id: "12", n: "Elgato Stream Deck MK.2", s: "10GAA9901", barcode: "840006637400",
     brand: "Elgato", category: "Streaming", p: 119.00, retail: 149.99, k: true, stock: 22,
     d: "15 customizable LCD keys to control apps, tools, and platforms with tactile feedback.",
-    img: "/assets/product_images/Elgato_Stream_Deck_MK2.jpg"
+    img: "/assets/product_images/Elgato_Stream_Deck_MK2.webp"
   },
   {
     id: "13", n: "JBL Tune 770NC Wireless Over-Ear Headphones", s: "JBLT770NCBLU", barcode: "050036394511",
     brand: "JBL", category: "Headset", p: 89.00, retail: 129.95, k: true, stock: 28,
     d: "Adaptive Noise Cancelling wireless headphones with JBL Pure Bass Sound and 70H battery life.",
-    img: "/assets/product_images/JBL_Tune_770NC.jpg"
+    img: "/assets/product_images/JBL_Tune_770NC.webp"
   },
   {
     id: "14", n: "Samsung T7 Shield 1TB Portable SSD", s: "MU-PE1T0S/AM", barcode: "887276633856",
     brand: "Samsung", category: "Adapter / Hub", p: 99.00, retail: 134.99, k: true, stock: 35,
     d: "Rugged external solid state drive with IP65 dust and water resistance and USB 3.2 Gen 2.",
-    img: "/assets/product_images/Samsung_T7_Shield.jpg"
+    img: "/assets/product_images/Samsung_T7_Shield.webp"
   }
 ];
 
 function getItems() {
   const cache = getCache();
   const ov = loadOverrides();
-  const rawList = cache.items && cache.items.length > 0 ? cache.items : FALLBACK_ITEMS;
+  const usingCache = Boolean(cache.items && cache.items.length > 0);
+  const rawList = usingCache ? cache.items : FALLBACK_ITEMS;
   const items = rawList.map(it => {
     const o = ov[it.id] || {};
     const autoImg = findProductImage(it);
@@ -378,7 +211,7 @@ function getItems() {
       img:             o.img      !== undefined ? o.img      : (autoImg || null),
     };
   });
-  return { updatedAt: cache.updatedAt || Date.now(), items };
+  return { updatedAt: cache.updatedAt || STARTED_AT, items, dataSource: usingCache ? "zoho" : "demo" };
 }
 
 // ============ Zoho sync ============
@@ -586,16 +419,27 @@ function mapItem(it, priceMap, pricebookMap) {
 
   const wholesale = extractWholesalePrice(it, priceMap, rawDesc, pricebookMap);
 
+  // Zoho items sometimes carry the barcode in `name` and the real product title
+  // only in the description. Fall back to the description ONLY in that case —
+  // preferring it unconditionally (as this did) renamed every properly-named
+  // product to its marketing blurb, which also broke image matching. Same rule
+  // as normalizeItem() in lib/product-matching.js.
+  const rawName = (it.name ?? '').trim();
+  const isNameDigits = /^\d+$/.test(rawName);
+  const modelName = (isNameDigits || !rawName) ? (nameFromDesc || it.sku || rawName) : rawName;
+  const customBarcode = (it.custom_fields || []).find(f => /^(barcode|upc|ean)$/i.test(f.label || ''))?.value || null;
+  const barcodeVal = customBarcode || (isNameDigits ? rawName : (it.sku || rawName));
+
   const brandVal = it.brand || (it.custom_fields || []).find(f => /brand/i.test(f.label || f.api_name || ''))?.value || '';
   const catVal = it.category_name || it.product_type || (it.custom_fields || []).find(f => /category|type/i.test(f.label || f.api_name || ''))?.value || 'Accessories';
 
   return {
     id: String(it.item_id || it.id || ''),
-    n: nameFromDesc || it.name || "",
-    name: nameFromDesc || it.name || "",
+    n: modelName,
+    name: modelName,
     s: it.sku || "",
     sku: it.sku || "",
-    barcode: it.name || "",
+    barcode: barcodeVal,
     brand: brandVal,
     category: catVal,
     c: "all",
@@ -612,8 +456,21 @@ function mapItem(it, priceMap, pricebookMap) {
   };
 }
 
+// Which Zoho settings are absent. Empty array == fully configured.
+function missingZohoConfig() {
+  const missing = [];
+  if (!ZOHO_ORG_ID) missing.push("ZOHO_ORG_ID");
+  if (!ZOHO_REFRESH_TOKEN) missing.push("ZOHO_REFRESH_TOKEN");
+  return missing;
+}
+
+// Set once a sync actually writes the cache, so /api/status can distinguish
+// "never connected" from "connected but the last attempt failed".
+let lastSyncOk = null;
+let lastSyncError = null;
+
 async function syncNow() {
-  if (!ZOHO_ORG_ID || !ZOHO_REFRESH_TOKEN) {
+  if (missingZohoConfig().length > 0) {
     return;
   }
   try {
@@ -677,14 +534,100 @@ async function syncNow() {
 
     fs.writeFileSync(CACHE_FILE, JSON.stringify({ updatedAt: Date.now(), items }, null, 0));
     console.log(`  cached ${items.length} items (${items.filter(i=>i.k).length} in stock, ${items.filter(i=>i.p != null).length} with wholesale price)`);
+    lastSyncOk = Date.now();
+    lastSyncError = null;
   } catch (e) {
+    lastSyncError = e.message;
     console.error("  sync failed:", e.message);
   }
 }
 
+// Stable stand-in for "last updated" when no Zoho cache exists yet (demo data).
+// Using Date.now() per request made every response unique, which defeated
+// caching and made the UI's "Updated" label tick on every poll.
+const STARTED_AT = Date.now();
+
 function getCache() {
   if (!fs.existsSync(CACHE_FILE)) return { updatedAt: 0, items: [] };
   try { return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")); } catch { return { updatedAt: 0, items: [] }; }
+}
+
+// ============ online image search providers ============
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || CONFIG.GOOGLE_API_KEY || "";
+const GOOGLE_CSE_ID  = process.env.GOOGLE_CSE_ID  || CONFIG.GOOGLE_CSE_ID  || "";
+const SEARCH_TIMEOUT_MS = 10000;
+const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+// Every outbound call here is to a third party that may be slow, blocked, or
+// silently dropping packets. Without a deadline the admin UI span forever.
+function fetchWithTimeout(url, opts = {}) {
+  return fetch(url, { ...opts, signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS) });
+}
+
+const IMAGE_SEARCH_PROVIDERS = [
+  {
+    name: "google",
+    enabled: () => Boolean(GOOGLE_API_KEY && GOOGLE_CSE_ID),
+    disabledReason: "not configured (set GOOGLE_API_KEY and GOOGLE_CSE_ID in .env)",
+    async search(query) {
+      const u = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(GOOGLE_API_KEY)}`
+        + `&cx=${encodeURIComponent(GOOGLE_CSE_ID)}&searchType=image&num=8&safe=active`
+        + `&q=${encodeURIComponent(query)}`;
+      const res = await fetchWithTimeout(u);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Google returns a descriptive reason (bad key, quota exceeded, CSE not
+        // configured for image search); pass it through rather than hiding it.
+        throw new Error(data?.error?.message || `HTTP ${res.status}`);
+      }
+      return (data.items || []).map(r => ({
+        title: r.title,
+        image: r.link,
+        thumbnail: r.image?.thumbnailLink || r.link,
+        width: r.image?.width,
+        height: r.image?.height,
+        source: r.image?.contextLink,
+      }));
+    },
+  },
+  {
+    name: "duckduckgo",
+    enabled: () => true,
+    async search(query) {
+      const tokenRes = await fetchWithTimeout(
+        `https://duckduckgo.com/?q=${encodeURIComponent(query + " product")}`,
+        { headers: { "User-Agent": BROWSER_UA } });
+      const html = await tokenRes.text();
+      const vqdMatch = html.match(/vqd=([0-9-]+)/) || html.match(/vqd="([^"]+)"/);
+      if (!vqdMatch) throw new Error("blocked (no search token returned)");
+      const imgRes = await fetchWithTimeout(
+        `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(query)}&vqd=${vqdMatch[1]}`,
+        { headers: { "User-Agent": BROWSER_UA, Referer: "https://duckduckgo.com/" } });
+      if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
+      const data = await imgRes.json();
+      return (data.results || []).slice(0, 8).map(r => ({
+        title: r.title, image: r.image, thumbnail: r.thumbnail,
+        width: r.width, height: r.height, source: r.url,
+      }));
+    },
+  },
+];
+
+// Turn the per-provider attempt log into one sentence an admin can act on.
+function describeSearchFailure(attempts) {
+  const tried = attempts.filter(a => a.error);
+  const skipped = attempts.filter(a => a.skipped);
+  if (tried.length === 0 && skipped.length > 0) {
+    return `No image search provider is available. ${skipped.map(s => `${s.provider}: ${s.skipped}`).join("; ")}`;
+  }
+  if (tried.every(a => a.error === "no results")) {
+    return "";  // genuinely nothing found — the UI's empty state is correct
+  }
+  const detail = tried.map(a => `${a.provider}: ${a.error}`).join("; ");
+  const hint = skipped.length
+    ? ` Configure Google image search for a reliable result (${skipped.map(s => s.provider).join(", ")} unconfigured).`
+    : "";
+  return `Image search failed — ${detail}.${hint}`;
 }
 
 // ============ simple session auth ============
@@ -692,12 +635,6 @@ const sessions = new Map(); // token -> { user, exp }
 const SESSION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 function makeToken() { return crypto.randomBytes(24).toString("hex"); }
-
-function checkLogin(username, password) {
-  const u = (CLIENTS || []).find(c =>
-    c.username.toLowerCase() === String(username).toLowerCase() && c.password === password);
-  return !!u;
-}
 
 function getSession(req) {
   const cookie = req.headers.cookie || "";
@@ -764,10 +701,11 @@ const server = http.createServer(async (req, res) => {
     try { creds = JSON.parse(body); } catch {}
     const usernameInput = (creds.email || creds.username || "").trim();
     const passwordInput = creds.password || "";
-    if (checkLogin(usernameInput, passwordInput)) {
+    const client = findClient(CLIENTS, usernameInput, passwordInput);
+    if (client) {
       const tok = makeToken();
-      sessions.set(tok, { user: usernameInput, exp: Date.now() + SESSION_MS });
-      const clientObj = { name: usernameInput || 'Client', company: null, email: usernameInput };
+      sessions.set(tok, { user: client.username || client.email, exp: Date.now() + SESSION_MS });
+      const clientObj = toClientProfile(client);
       send(res, 200, { ok: true, success: true, client: clientObj }, {
         "Set-Cookie": `session=${tok}; HttpOnly; Path=/; Max-Age=${SESSION_MS/1000}; SameSite=Lax`,
       });
@@ -777,12 +715,44 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---- API: status (admin only — reports config state) ----
+  if (pathn === "/api/status" && req.method === "GET") {
+    if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
+    const data = getItems();
+    const missing = missingZohoConfig();
+    send(res, 200, {
+      zohoConfigured: missing.length === 0,
+      missingConfig: missing,
+      dataSource: data.dataSource,
+      itemCount: data.items.length,
+      cacheFileExists: fs.existsSync(CACHE_FILE),
+      lastSyncOk,
+      lastSyncError,
+      syncIntervalMinutes: SYNC_INTERVAL_MINUTES || 5,
+    });
+    return;
+  }
+
   // ---- API: products / items ----
   if (pathn === "/api/products" || pathn === "/api/items") {
     const data = getItems();
-    send(res, 200, { updatedAt: data.updatedAt, products: data.items, items: data.items }, {
-      "Cache-Control": "no-cache, no-store, must-revalidate"
-    });
+    const payload = JSON.stringify({ updatedAt: data.updatedAt, dataSource: data.dataSource, products: data.items, items: data.items });
+
+    // The catalog re-polls this endpoint every 60s and on every tab focus. The
+    // payload only changes when a Zoho sync or an admin edit lands, so tag it
+    // and let unchanged polls terminate as a 304 with no body. "no-cache" (not
+    // "no-store") is what makes that possible: the browser may keep the
+    // response but must revalidate it before reuse, so clients still see edits
+    // immediately.
+    const etag = '"' + crypto.createHash("sha1").update(payload).digest("hex") + '"';
+    const headers = { "Cache-Control": "no-cache", "ETag": etag };
+
+    if (req.headers["if-none-match"] === etag) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    send(res, 200, payload, headers);
     return;
   }
 
@@ -887,40 +857,48 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- Auto-Find Images Online ----
+  //
+  // This used to call DuckDuckGo's internal i.js endpoint and nothing else. On
+  // this network duckduckgo.com does not resolve to a reachable host at all
+  // (connections time out, while google/bing/github respond in <1s), so the
+  // feature could never work here — and every failure surfaced in the admin UI
+  // as the indistinguishable message "No images found".
+  //
+  // Providers are now tried in order and each reports why it failed, so the UI
+  // can say "DuckDuckGo unreachable" instead of implying an empty result set.
+  // Google is the reliable option: it is an official, documented API. Set
+  // GOOGLE_API_KEY and GOOGLE_CSE_ID in .env to enable it (see README).
   if (pathn === "/api/admin/search-images") {
     if (!getAdminSession(req)) { send(res, 401, { error: "unauthorized" }); return; }
     const q = url.searchParams.get("q") || "";
     if (!q.trim()) { send(res, 400, { error: "Query required" }); return; }
-    try {
-      const cleanQuery = q.replace(/[^a-zA-Z0-9\s\-]/g, " ").replace(/\s+/g, " ").trim();
-      const tokenUrl = `https://duckduckgo.com/?q=${encodeURIComponent(cleanQuery + " product")}`;
-      const tokenRes = await fetch(tokenUrl, {
-        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
-      });
-      const html = await tokenRes.text();
-      const vqdMatch = html.match(/vqd=([0-9-]+)/) || html.match(/vqd=([a-zA-Z0-9_-]+)/) || html.match(/vqd="([^"]+)"/);
-      if (!vqdMatch) { send(res, 200, { results: [] }); return; }
-      const vqd = vqdMatch[1];
-      const imgUrl = `https://duckduckgo.com/i.js?l=us-en&o=json&q=${encodeURIComponent(cleanQuery)}&vqd=${vqd}`;
-      const imgRes = await fetch(imgUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Referer: "https://duckduckgo.com/"
+
+    const cleanQuery = q.replace(/[^a-zA-Z0-9\s\-]/g, " ").replace(/\s+/g, " ").trim();
+    const attempts = [];
+
+    for (const provider of IMAGE_SEARCH_PROVIDERS) {
+      if (!provider.enabled()) {
+        attempts.push({ provider: provider.name, skipped: provider.disabledReason });
+        continue;
+      }
+      try {
+        const results = await provider.search(cleanQuery);
+        if (results.length > 0) {
+          send(res, 200, { results, provider: provider.name, attempts });
+          return;
         }
-      });
-      const data = await imgRes.json();
-      const results = (data.results || []).slice(0, 8).map(r => ({
-        title: r.title,
-        image: r.image,
-        thumbnail: r.thumbnail,
-        width: r.width,
-        height: r.height,
-        source: r.url
-      }));
-      send(res, 200, { results });
-    } catch (e) {
-      send(res, 500, { error: e.message });
+        attempts.push({ provider: provider.name, error: "no results" });
+      } catch (e) {
+        // A blocked or unreachable provider must not look like "nothing found".
+        const reason = e.name === "TimeoutError" || /abort/i.test(e.message)
+          ? "unreachable (timed out)"
+          : e.message;
+        attempts.push({ provider: provider.name, error: reason });
+        console.warn(`  image search via ${provider.name} failed: ${reason}`);
+      }
     }
+
+    send(res, 200, { results: [], attempts, error: describeSearchFailure(attempts) });
     return;
   }
 
@@ -982,7 +960,20 @@ const server = http.createServer(async (req, res) => {
   setInterval(syncNow, mins * 60 * 1000);
   server.listen(PORT_NUM, () => {
     console.log(`\niTLand Wholesale Portal running at http://localhost:${PORT_NUM}`);
-    console.log(`Syncing from Zoho every ${mins} minute(s).`);
+    const missing = missingZohoConfig();
+    if (missing.length > 0) {
+      // Previously this printed "Syncing from Zoho every N minutes" regardless,
+      // so a portal serving 14 built-in demo products looked identical to a
+      // fully synced one. Say plainly which setting is missing.
+      console.log(`\n  !!  NOT CONNECTED TO ZOHO — serving ${FALLBACK_ITEMS.length} built-in demo products.`);
+      console.log(`  !!  Missing: ${missing.join(", ")}`);
+      console.log(`  !!  Add them to .env, then restart. See "Connecting Zoho" in README.md.\n`);
+    } else if (!fs.existsSync(CACHE_FILE)) {
+      console.log(`\n  !!  Zoho is configured but no cache was written yet — first sync may have failed.`);
+      console.log(`  !!  Check the log above, or GET /api/status as an admin.\n`);
+    } else {
+      console.log(`Syncing from Zoho every ${mins} minute(s).`);
+    }
     console.log(`Press Ctrl+C to stop.\n`);
   });
 })();

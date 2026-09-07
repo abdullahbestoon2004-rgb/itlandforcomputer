@@ -24,7 +24,7 @@ export default function Detail({ t, item, onBack }) {
           <div className="detail-card" style={{ padding:'30px 30px 34px' }}>
             {item.img && (
               <div className="detail-img" style={{ display:'flex', justifyContent:'center', alignItems:'center', background:'#fff', border:'1px solid #F0ECE1', borderRadius:14, padding:'24px', marginBottom:28, minHeight:220 }}>
-                <img src={item.img} alt={item.n} style={{ maxHeight:260, maxWidth:'100%', objectFit:'contain' }} />
+                <img src={item.img} alt={item.n} decoding="async" style={{ maxHeight:260, maxWidth:'100%', objectFit:'contain' }} />
               </div>
             )}
             <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:10, marginBottom:16 }}>

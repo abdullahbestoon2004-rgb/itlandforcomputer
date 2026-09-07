@@ -230,7 +230,7 @@ export default function Catalog({
                   <div key={it.id} className="card" onClick={() => onOpen(it)} style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:0, cursor:'pointer', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
                     {it.img ? (
                       <div className="card-img" style={{ height:130, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', background:'#fff', borderRadius:10, margin:'var(--cardpad)', marginBottom:0, overflow:'hidden' }}>
-                        <img src={it.img} alt={it.n} style={{ maxHeight:'100%', maxWidth:'100%', objectFit:'contain' }} />
+                        <img src={it.img} alt={it.n} loading="lazy" decoding="async" width="200" height="130" style={{ maxHeight:'100%', maxWidth:'100%', objectFit:'contain' }} />
                       </div>
                     ) : (
                       <div className="card-img card-img-empty" style={{ height:90, flexShrink:0, alignItems:'center', justifyContent:'center', background:'#fff', display:'none' }}>

@@ -43,6 +43,7 @@ function EditModal({ item, images, onClose, onSaved }) {
 
   const [showGallery, setShowGallery] = useState(false);
   const [showOnlineSearch, setShowOnlineSearch] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const [onlineResults, setOnlineResults] = useState([]);
   const [searchingOnline, setSearchingOnline] = useState(false);
   const [attachingOnline, setAttachingOnline] = useState(false);
@@ -65,11 +66,17 @@ function EditModal({ item, images, onClose, onSaved }) {
     setSearchingOnline(true);
     setShowOnlineSearch(true);
     setShowGallery(false);
+    setSearchError('');
     try {
       const res = await aapi(`/api/admin/search-images?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       setOnlineResults(data.results || []);
-    } catch {
+      // Distinguish "searched fine, found nothing" from "could not search".
+      // Previously every failure — blocked network, bad API key, expired admin
+      // session — showed the same "No images found" message.
+      if (!data.results?.length) setSearchError(data.error || '');
+    } catch (err) {
+      setSearchError(`Could not reach the server: ${err.message}`);
       setOnlineResults([]);
     } finally {
       setSearchingOnline(false);
@@ -327,6 +334,11 @@ function EditModal({ item, images, onClose, onSaved }) {
                         <div style={{ fontSize: 9, color: '#8B8071', marginTop: 2 }}>{cand.width}x{cand.height}</div>
                       </div>
                     ))}
+                  </div>
+                ) : searchError ? (
+                  <div style={{ padding: '14px 12px', fontSize: 12.5, lineHeight: 1.5, color: '#8A2B18', background: '#FDEDE9', border: '1.5px solid #F9C5BB', borderRadius: 10 }}>
+                    <strong style={{ display: 'block', marginBottom: 3 }}>Image search unavailable</strong>
+                    {searchError}
                   </div>
                 ) : (
                   <div style={{ padding: '16px 0', textAlign: 'center', fontSize: 13, color: '#8B8071' }}>No images found. Try editing the search box above.</div>
