@@ -32,8 +32,8 @@ try {
 let CONFIG = {};
 try { CONFIG = require("./config.json"); } catch {}
 
-const ZOHO_CLIENT_ID        = process.env.ZOHO_CLIENT_ID        || CONFIG.ZOHO_CLIENT_ID || '1000.06T75SSOK56I52CL0GHJL45YVSG7DK';
-const ZOHO_CLIENT_SECRET    = process.env.ZOHO_CLIENT_SECRET    || CONFIG.ZOHO_CLIENT_SECRET || '783ace0cbad1786e5b0fd1834c72e63668c59978fb';
+const ZOHO_CLIENT_ID        = process.env.ZOHO_CLIENT_ID        || CONFIG.ZOHO_CLIENT_ID;
+const ZOHO_CLIENT_SECRET    = process.env.ZOHO_CLIENT_SECRET    || CONFIG.ZOHO_CLIENT_SECRET;
 const ZOHO_ORG_ID           = process.env.ZOHO_ORG_ID           || CONFIG.ZOHO_ORG_ID;
 const ZOHO_REFRESH_TOKEN    = process.env.ZOHO_REFRESH_TOKEN    || CONFIG.ZOHO_REFRESH_TOKEN;
 const ZOHO_ACCOUNTS_DOMAIN  = process.env.ZOHO_ACCOUNTS_DOMAIN  || CONFIG.ZOHO_ACCOUNTS_DOMAIN || 'https://accounts.zoho.com';
@@ -43,7 +43,7 @@ const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_I
 const { loadClients, findClient, toClientProfile } = require("./lib/clients.js");
 const CLIENTS = CONFIG.CLIENTS || loadClients(process.env);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "admin";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD || "admin123";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD;
 
 const CACHE_FILE = path.join(__dirname, "items-cache.json");
 const PORT_NUM = process.env.PORT || CONFIG.PORT || 3000;
@@ -461,6 +461,8 @@ function missingZohoConfig() {
   const missing = [];
   if (!ZOHO_ORG_ID) missing.push("ZOHO_ORG_ID");
   if (!ZOHO_REFRESH_TOKEN) missing.push("ZOHO_REFRESH_TOKEN");
+  if (!ZOHO_CLIENT_ID) missing.push("ZOHO_CLIENT_ID");
+  if (!ZOHO_CLIENT_SECRET) missing.push("ZOHO_CLIENT_SECRET");
   return missing;
 }
 
@@ -761,7 +763,7 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     let creds = {};
     try { creds = JSON.parse(body); } catch {}
-    if (ADMIN_USERNAME && creds.username === ADMIN_USERNAME && creds.password === ADMIN_PASSWORD) {
+    if (ADMIN_USERNAME && ADMIN_PASSWORD && creds.username === ADMIN_USERNAME && creds.password === ADMIN_PASSWORD) {
       const tok = makeToken();
       adminSessions.set(tok, { user: creds.username, exp: Date.now() + SESSION_MS });
       send(res, 200, { ok: true }, {
@@ -1043,6 +1045,16 @@ ZOHO_API_DOMAIN=${esc(api)}`}</pre>
   setInterval(syncNow, mins * 60 * 1000);
   server.listen(PORT_NUM, () => {
     console.log(`\niTLand Wholesale Portal running at http://localhost:${PORT_NUM}`);
+    if (!CLIENTS.length) {
+      // Failing closed is correct, but silence would look like a broken login.
+      console.log(`\n  !!  NO WHOLESALE ACCOUNTS CONFIGURED — every client login will be refused.`);
+      console.log(`  !!  Set WHOLESALE_CLIENTS in .env, e.g.`);
+      console.log(`  !!    WHOLESALE_CLIENTS=[{"username":"itland","password":"...","name":"iTLand Client"}]\n`);
+    }
+    if (!ADMIN_PASSWORD) {
+      console.log(`  !!  ADMIN_PASSWORD is not set — the admin panel is closed.\n`);
+    }
+
     const missing = missingZohoConfig();
     if (missing.length > 0) {
       // Previously this printed "Syncing from Zoho every N minutes" regardless,
