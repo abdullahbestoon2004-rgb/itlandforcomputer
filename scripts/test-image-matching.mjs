@@ -30,10 +30,6 @@ const report = (suite, bad, total) => {
 
 // ── 1. Products with no correct art must return NOTHING ──────────────────────
 const mustBeNull = [
-  'Logitech M240 Silent Bluetooth Mouse',
-  'Logitech K400 Plus Wireless Touch Keyboard',
-  'Logitech MK295 Silent Wireless Combo',
-  'Logitech H390 USB Headset',
   'Logitech C270i IPTV HD Webcam',
   'Jabra Evolve2 75 Wireless Headset',
   'Jabra Speak 750 UC Speakerphone',
@@ -92,6 +88,11 @@ const confusable = [
   ['Logitech Group Conference System',                 'Logitech_Group_Conference_System.webp'],
   ['Logitech Group 10M Extended Cable',                'Logitech_Group_10M_Cable.webp'],
   ['Logitech Group 15M Extended Cable',                'Logitech_Group_15M_Cable.webp'],
+  // Official art fetched from logitech.com via scripts/fetch-product-images.mjs.
+  ['Logitech M240 Silent Bluetooth Mouse',             'Logitech_M240.webp'],
+  ['Logitech MK295 Silent Wireless Combo',             'Logitech_MK295.webp'],
+  ['Logitech H390 USB Headset',                        'Logitech_H390.webp'],
+  ['Logitech K400 Plus Wireless Touch Keyboard',       'Logitech_K400_Plus_Touch.webp'],
   // Same product, different marketing name / colourway — should still match.
   ['Logitech Z150 Stereo Speakers Midnight Black',     'Logitech_Z150.webp'],
   ['Logitech M350s Pebble Mouse 2',                    'Logitech_Pebble_Mouse_2.webp'],

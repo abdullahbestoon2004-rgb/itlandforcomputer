@@ -935,6 +935,89 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---- Zoho refresh-token helper ----
+  // The same generator exists as a Vercel function in api/zoho-callback.js, but
+  // that one is unreachable when running locally, which is exactly when it is
+  // needed. Exchanges a Self Client grant code for a refresh token and prints
+  // the .env lines to paste. Nothing is written to disk or logged.
+  if (pathn === "/api/zoho-callback") {
+    const esc = (v) => String(v == null ? "" : v).replace(/[&<>"]/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const page = (body) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<!doctype html><html><head><meta charset="utf-8"><title>Zoho Refresh Token</title>
+<style>body{font-family:system-ui,-apple-system,sans-serif;background:#FAF8F5;color:#17130E;padding:40px 20px}
+.card{max-width:620px;margin:0 auto;background:#fff;border:2px solid #17130E;border-radius:18px;padding:30px;box-shadow:6px 6px 0 #17130E}
+label{display:block;font-weight:700;font-size:13px;margin:16px 0 6px}
+input,select{width:100%;padding:11px;font-size:14px;border:1.5px solid #D6CDBB;border-radius:10px;box-sizing:border-box;font-family:ui-monospace,monospace}
+button{width:100%;margin-top:22px;padding:14px;background:#17130E;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer}
+pre{background:#17130E;color:#8CE99A;padding:16px;border-radius:10px;overflow-x:auto;font-size:13px}
+.hint{font-size:12.5px;color:#776E62;margin-top:5px}.err{background:#FDEDE9;border:1.5px solid #F9C5BB;color:#8A2B18;padding:14px;border-radius:10px;font-size:13.5px}</style>
+</head><body><div class="card">${body}</div></body></html>`);
+    };
+
+    if (req.method === "GET") {
+      page(`<h2>Get your Zoho refresh token</h2>
+<p style="font-size:14px;color:#555">Paste the <b>grant code</b> from the API Console's <i>Generate Code</i> step. It expires within minutes, so do this straight away.</p>
+<form method="POST">
+  <label>Client ID</label><input name="client_id" value="${esc(ZOHO_CLIENT_ID)}" required>
+  <label>Client Secret</label><input name="client_secret" value="${esc(ZOHO_CLIENT_SECRET)}" required>
+  <label>Grant code</label><input name="code" placeholder="1000.abc123..." required autofocus>
+  <label>Data centre</label>
+  <select name="dc">
+    <option value="https://accounts.zoho.com">books.zoho.com (default)</option>
+    <option value="https://accounts.zoho.eu">books.zoho.eu</option>
+    <option value="https://accounts.zoho.in">books.zoho.in</option>
+    <option value="https://accounts.zoho.com.au">books.zoho.com.au</option>
+    <option value="https://accounts.zoho.sa">books.zoho.sa</option>
+  </select>
+  <div class="hint">Must match the region your Zoho Books URL uses, or the code will be rejected.</div>
+  <button type="submit">Exchange for refresh token</button>
+</form>`);
+      return;
+    }
+
+    if (req.method === "POST") {
+      const form = new URLSearchParams(await readBody(req));
+      const dc = form.get("dc") || ZOHO_ACCOUNTS_DOMAIN;
+      try {
+        const r = await fetch(`${dc}/oauth/v2/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: form.get("client_id") || "",
+            client_secret: form.get("client_secret") || "",
+            code: form.get("code") || "",
+          }).toString(),
+          signal: AbortSignal.timeout(20000),
+        });
+        const data = await r.json();
+        if (!data.refresh_token) {
+          page(`<h2>Zoho rejected that</h2><div class="err"><b>${esc(data.error || "unknown error")}</b>
+<p style="margin:8px 0 0">${esc(data.error === "invalid_code"
+  ? "The code was already used or has expired — generate a fresh one. Each code works exactly once."
+  : data.error === "invalid_client"
+  ? "Client ID/Secret wrong, or the data centre does not match the one that issued the code."
+  : JSON.stringify(data))}</p></div>
+<p style="margin-top:18px"><a href="/api/zoho-callback">Try again</a></p>`);
+          return;
+        }
+        const api = dc.replace("accounts.zoho", "www.zohoapis");
+        page(`<h2>Done — add these to .env</h2>
+<p style="font-size:14px;color:#555">Then restart the server. This token is long-lived; keep it private.</p>
+<pre>ZOHO_ORG_ID=&lt;your Organization ID&gt;
+ZOHO_REFRESH_TOKEN=${esc(data.refresh_token)}${dc === "https://accounts.zoho.com" ? "" : `
+ZOHO_ACCOUNTS_DOMAIN=${esc(dc)}
+ZOHO_API_DOMAIN=${esc(api)}`}</pre>
+<p class="hint">Organization ID: Zoho Books &rarr; Settings &rarr; Organization.</p>`);
+      } catch (e) {
+        page(`<h2>Could not reach Zoho</h2><div class="err">${esc(e.message)}</div>`);
+      }
+      return;
+    }
+  }
+
   // ---- static files (serve built React app from dist/, assets from public/) ----
   let file = pathn === "/" ? "/index.html" : pathn;
   const safe = path.normalize(file).replace(/^(\.\.[/\\])+/, "");

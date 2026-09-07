@@ -116,10 +116,19 @@ have to come from your own Zoho account:
 **2. Refresh token** — a one-time OAuth exchange:
 
 - In the [Zoho API Console](https://api-console.zoho.com/), create (or open) a **Self Client**.
-- Under *Generate Code*, use scope `ZohoBooks.fullaccess.all`, pick your org, and set a
-  short duration. Copy the code — it expires in minutes.
-- Start the server and open `/api/zoho-callback` in a browser. Paste the Client ID, Client
-  Secret, and the code into that form; it returns your refresh token.
+- Under *Generate Code* enter scope `ZohoBooks.items.READ,ZohoBooks.settings.READ`
+  (read-only is all the portal needs), set the duration to 10 minutes, then **Create** and
+  pick your Books organization. Copy the code — it works once and expires quickly.
+- With the server running (`npm run server`), open
+  <http://localhost:3000/api/zoho-callback>. Paste the Client ID, Client Secret and the
+  code, choose your data centre, and it returns the refresh token plus the exact `.env`
+  lines to paste.
+
+> Zoho runs regional data centres and **a grant code only works on the one that issued
+> it**. Check your Zoho Books URL: `books.zoho.com` needs no extra settings, but `.eu`,
+> `.in`, `.com.au` or `.sa` also require `ZOHO_ACCOUNTS_DOMAIN` and `ZOHO_API_DOMAIN`
+> (the helper page prints these for you). A mismatch shows up as a confusing
+> `invalid_client` rather than anything obvious.
 
 **3. Put both in `.env`** (never commit it — it is already gitignored):
 

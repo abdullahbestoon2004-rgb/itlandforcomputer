@@ -7,3 +7,6 @@ wholesale-prices.json
 config.json
 .env
 .vercel/
+
+# scratch cache for scripts/fetch-product-images.mjs
+.image-fetch-cache/
