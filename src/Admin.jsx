@@ -377,16 +377,27 @@ export function AdminLogin({ onSuccess, onBack }) {
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const login = async () => {
-    if (!user.trim() || !pass.trim()) { setError(true); return; }
+    if (!user.trim() || !pass.trim()) { setError('Enter a username and password.'); return; }
     setLoading(true);
-    const res = await aapi('/api/admin/login', { method: 'POST', body: JSON.stringify({ username: user, password: pass }) });
-    setLoading(false);
-    if (res.ok) { setError(false); onSuccess(); }
-    else setError(true);
+    try {
+      const res = await aapi('/api/admin/login', { method: 'POST', body: JSON.stringify({ username: user, password: pass }) });
+      if (res.ok) { setError(''); onSuccess(); return; }
+      // Only 401 actually means the credentials are wrong. Anything else is a
+      // server or proxy problem — reporting those as "invalid credentials" sent
+      // people rechecking a password that was correct all along, typically when
+      // the API server was simply restarting.
+      setError(res.status === 401
+        ? 'Invalid admin credentials.'
+        : `Sign-in failed (server returned ${res.status}). Is the API server running?`);
+    } catch (err) {
+      setError(`Cannot reach the server — ${err.message}. Is it running on port 3000?`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -447,7 +458,7 @@ export function AdminLogin({ onSuccess, onBack }) {
             </button>
           </div>
 
-          {error && <div style={{ fontSize: 13, color: '#DE3A1E', fontWeight: 600, margin: '2px 0 10px' }}>Invalid admin credentials.</div>}
+          {error && <div style={{ fontSize: 13, color: '#DE3A1E', fontWeight: 600, margin: '2px 0 10px', lineHeight: 1.45 }}>{error}</div>}
 
           <button onClick={login} className="btn-press"
             style={{ width: '100%', marginTop: 10, padding: 13, fontSize: 15, fontWeight: 800, fontFamily: 'inherit', color: '#fff', background: 'var(--pri)', border: '2px solid #17130E', borderRadius: 13, boxShadow: '3px 3px 0 #17130E', cursor: 'pointer' }}>
