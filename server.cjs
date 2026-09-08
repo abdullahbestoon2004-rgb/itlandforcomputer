@@ -634,118 +634,18 @@ function describeSearchFailure(attempts) {
 }
 
 // ============ Excel export ============
-const ExcelJS = require("exceljs");
-const { execFileSync } = require("child_process");
+// The workbook itself is built in lib/catalogue-workbook.js, shared with the
+// Vercel function so both deployments produce the same file. Thumbnails are
+// pre-built by scripts/build-xlsx-thumbs.mjs — Excel will not reliably render
+// the WebP product images, and converting them at request time needed dwebp,
+// which does not exist in a serverless runtime.
+const { buildCatalogueWorkbook, exportFilename } = require("./lib/catalogue-workbook.js");
+const XLSX_THUMB_DIR = path.join(__dirname, "public", "assets", "xlsx-thumbs");
 
-const XLSX_PNG_CACHE = path.join(__dirname, ".image-fetch-cache", "xlsx-png");
-const XLSX_IMG_PX = 64;            // rendered size of the image column
-const XLSX_ROW_HEIGHT = 50;        // points; roughly matches XLSX_IMG_PX
-
-const XLSX_COLUMNS = [
-  { header: "Image",       key: "img",       width: 11 },
-  { header: "Product",     key: "name",      width: 52 },
-  { header: "Code / SKU",  key: "sku",       width: 20 },
-  { header: "Barcode",     key: "barcode",   width: 18 },
-  { header: "Wholesale",   key: "wholesale", width: 13, money: true },
-  { header: "Retail",      key: "retail",    width: 13, money: true },
-  { header: "Stock",       key: "stock",     width: 9 },
-  { header: "Status",      key: "status",    width: 12 },
-  { header: "Category",    key: "category",  width: 20 },
-  { header: "Description", key: "desc",      width: 60 },
-];
-
-/**
- * Excel will not reliably render WebP, and every product image is WebP, so each
- * one is decoded to a small PNG. The result is cached because a single export
- * touches ~200 images and the conversion is the slow part; later exports reuse
- * the cache. Returns null when the source is missing or dwebp is unavailable —
- * a missing picture must never fail the whole download.
- */
-function productImagePng(imgPath) {
-  if (!imgPath) return null;
-  const file = path.basename(imgPath);
-  if (!/^[A-Za-z0-9._-]+\.webp$/i.test(file)) return null;
-  const src = path.join(IMAGE_DIR, file);
-  if (!fs.existsSync(src)) return null;
-  const dest = path.join(XLSX_PNG_CACHE, file.replace(/\.webp$/i, ".png"));
-  try {
-    if (!fs.existsSync(dest) || fs.statSync(dest).mtimeMs < fs.statSync(src).mtimeMs) {
-      fs.mkdirSync(XLSX_PNG_CACHE, { recursive: true });
-      execFileSync("dwebp", ["-quiet", "-resize", String(XLSX_IMG_PX * 2), "0", src, "-o", dest]);
-    }
-    return fs.readFileSync(dest);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * One sheet, each brand introduced by its own heading row and followed by its
- * products. In-stock items only — the catalogue defaults to in stock, and an
- * out-of-stock line is not something a client can order from.
- */
-async function buildCatalogueWorkbook() {
-  const items = getItems().items.filter(it => it.k);
-  const groups = groupByBrand(items);
-
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "iTLand Wholesale Portal";
-  wb.created = new Date();
-  const ws = wb.addWorksheet("Catalogue", {
-    views: [{ state: "frozen", ySplit: 1 }],
-    properties: { defaultRowHeight: 18 },
-  });
-  ws.columns = XLSX_COLUMNS.map(c => ({ key: c.key, width: c.width }));
-
-  const title = ws.addRow([`iTLand wholesale catalogue — ${items.length} items in stock — ${new Date().toISOString().slice(0, 10)}`]);
-  title.font = { bold: true, size: 14 };
-  ws.mergeCells(title.number, 1, title.number, XLSX_COLUMNS.length);
-  ws.addRow([]);
-
-  for (const group of groups) {
-    const head = ws.addRow([`${group.brand}  (${group.items.length})`]);
-    head.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
-    head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17130E" } };
-    head.height = 22;
-    ws.mergeCells(head.number, 1, head.number, XLSX_COLUMNS.length);
-
-    const cols = ws.addRow(XLSX_COLUMNS.map(c => c.header));
-    cols.font = { bold: true };
-    cols.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1EADC" } };
-
-    for (const it of group.items) {
-      const row = ws.addRow({
-        img: "",
-        name: it.n || it.name || "",
-        sku: it.s || it.sku || "",
-        barcode: it.barcode || "",
-        wholesale: it.p == null ? null : Number(it.p),
-        retail: it.retail == null ? null : Number(it.retail),
-        stock: Number(it.stock || 0),
-        status: it.k ? "In stock" : "Out of stock",
-        category: it.category || "",
-        desc: it.d || it.description || "",
-      });
-      for (const [i, c] of XLSX_COLUMNS.entries()) {
-        if (c.money) row.getCell(i + 1).numFmt = '"$"#,##0.00';
-      }
-      row.alignment = { vertical: "middle", wrapText: false };
-
-      const png = productImagePng(it.img);
-      if (png) {
-        row.height = XLSX_ROW_HEIGHT;
-        const id = wb.addImage({ buffer: png, extension: "png" });
-        ws.addImage(id, {
-          tl: { col: 0.15, row: row.number - 1 + 0.1 },
-          ext: { width: XLSX_IMG_PX, height: XLSX_IMG_PX },
-          editAs: "oneCell",
-        });
-      }
-    }
-    ws.addRow([]);
-  }
-
-  return Buffer.from(await wb.xlsx.writeBuffer());
+function loadThumbFromDisk(name) {
+  if (!/^[A-Za-z0-9._-]+\.jpg$/i.test(name)) return null;
+  const file = path.join(XLSX_THUMB_DIR, name);
+  return fs.existsSync(file) ? fs.readFileSync(file) : null;
 }
 
 // ============ simple session auth ============
@@ -851,11 +751,10 @@ const server = http.createServer(async (req, res) => {
     // silent failure.
     if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
     try {
-      const buf = await buildCatalogueWorkbook();
-      const stamp = new Date().toISOString().slice(0, 10);
+      const buf = await buildCatalogueWorkbook(getItems().items.filter(it => it.k), loadThumbFromDisk);
       res.writeHead(200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="itland-catalogue-${stamp}.xlsx"`,
+        "Content-Disposition": `attachment; filename="${exportFilename()}"`,
         "Content-Length": buf.length,
         "Cache-Control": "no-store",
       });

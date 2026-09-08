@@ -217,14 +217,22 @@ totalled.
 
 Two things worth knowing:
 
-- **Product images are converted on the way in.** Excel does not reliably render WebP and
-  every asset is WebP, so each one is decoded to a small PNG with `dwebp` and cached under
-  `.image-fetch-cache/xlsx-png/`. The first export pays that cost (~1s for 200 images);
-  later ones reuse the cache. A missing image never fails the download.
-- **This is the one product route that requires a session.** The file is the whole
-  wholesale price list, so it returns 401 without one. Sessions are held in memory, so
-  restarting the server logs clients out while their open tab still shows the catalogue —
-  the UI turns that 401 into a "sign in again" prompt rather than a silent failure.
+- **Product images come from pre-built thumbnails.** Excel does not reliably render WebP
+  and every asset is WebP, so `npm run build:thumbs` writes a 128px JPEG per image into
+  `public/assets/xlsx-thumbs/` (257 files, ~1 MB). **Run it after adding product images**,
+  alongside regenerating the manifest. They are committed because `dwebp` exists on a
+  developer machine but not in a serverless runtime, so converting at request time meant
+  the deployed export could not have shown pictures at all. A missing thumbnail never
+  fails the download.
+- **Both deployments serve it.** `server.cjs` reads the thumbnails from disk;
+  `api/export.xlsx.js` fetches the same files over HTTP from its own deployment. Both call
+  `lib/catalogue-workbook.js`, so the file is identical either way — verified byte for byte.
+- **The Node route requires a session; the serverless one cannot.** The file is the whole
+  wholesale price list, so `server.cjs` returns 401 without a session. Sessions live in that
+  process's memory and do not exist in a Vercel function, and `/api/products` there is
+  already unauthenticated, so gating only the spreadsheet would protect nothing. Restarting
+  the Node server logs clients out while their open tab still shows the catalogue — the UI
+  turns that 401 into a "sign in again" prompt rather than a silent failure.
 
 Brands are detected in [`lib/brands.js`](lib/brands.js), shared with the catalog's brand
 filter so the two always agree. Zoho carries no brand on any item, so it is read from the

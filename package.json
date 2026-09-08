@@ -12,7 +12,8 @@
     "fetch-images": "node scripts/fetch-product-images.mjs",
     "start": "node server.cjs",
     "build:start": "vite build && node server.cjs",
-    "test:images": "node scripts/test-image-matching.mjs"
+    "test:images": "node scripts/test-image-matching.mjs",
+    "build:thumbs": "node scripts/build-xlsx-thumbs.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
