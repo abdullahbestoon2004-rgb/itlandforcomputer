@@ -42,6 +42,7 @@ const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLES
 const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
 const { loadClients, findClient, toClientProfile } = require("./lib/clients.js");
 const { groupByBrand } = require("./lib/brands.js");
+const { applyOverrideEdit } = require("./lib/overrides.js");
 const CLIENTS = CONFIG.CLIENTS || loadClients(process.env);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD;
@@ -865,44 +866,19 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     let data = {};
     try { data = JSON.parse(body); } catch {}
-    const { itemId, reset, n, p, wholesale_price, retail, price, stock, quantity, k, in_stock, d, description, brand, category, sku, s, barcode, img } = data;
-    if (!itemId) { send(res, 400, { error: "itemId required" }); return; }
+    if (!data.itemId) { send(res, 400, { error: "itemId required" }); return; }
     const overrides = loadOverrides();
-    if (reset) {
-      delete overrides[itemId];
+    if (data.reset) {
+      delete overrides[data.itemId];
       saveOverrides(overrides);
       send(res, 200, { ok: true, reset: true });
       return;
     }
-    if (!overrides[itemId]) overrides[itemId] = {};
-
-    const finalP = p !== undefined ? p : wholesale_price;
-    const finalRetail = retail !== undefined ? retail : price;
-    const finalStock = stock !== undefined ? stock : quantity;
-    const finalK = k !== undefined ? k : in_stock;
-    const finalD = d !== undefined ? d : description;
-    const finalS = s !== undefined ? s : sku;
-
-    const setOrDelete = (field, value) => {
-      if (value === null) delete overrides[itemId][field];
-      else if (value !== undefined) overrides[itemId][field] = value;
-    };
-
-    setOrDelete('n', n);
-    setOrDelete('p', finalP === null ? null : (finalP !== undefined ? Number(finalP) : undefined));
-    setOrDelete('retail', finalRetail === null ? null : (finalRetail !== undefined ? Number(finalRetail) : undefined));
-    setOrDelete('stock', finalStock === null ? null : (finalStock !== undefined ? Number(finalStock) : undefined));
-    setOrDelete('k', finalK === null ? null : (finalK !== undefined ? Boolean(finalK) : undefined));
-    setOrDelete('d', finalD);
-    setOrDelete('brand', brand);
-    setOrDelete('category', category);
-    setOrDelete('s', finalS);
-    setOrDelete('barcode', barcode);
-    setOrDelete('img', img);
-
-    if (Object.keys(overrides[itemId]).length === 0) delete overrides[itemId];
+    // Field semantics live in lib/overrides.js so this route and the Vercel
+    // function api/admin/override.js cannot disagree about what a save means.
+    const entry = applyOverrideEdit(overrides, data);
     saveOverrides(overrides);
-    send(res, 200, { ok: true, item: overrides[itemId] || null });
+    send(res, 200, { ok: true, item: entry });
     return;
   }
 

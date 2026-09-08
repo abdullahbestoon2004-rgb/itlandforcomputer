@@ -1,5 +1,6 @@
 import { LOCAL_IMAGES } from '../product-image-manifest.js';
 import { createMatcher } from '../lib/product-matching.js';
+import { readOverrides } from '../lib/overrides-store.js';
 const ZOHO_AUTH_DOMAIN = process.env.ZOHO_AUTH_DOMAIN ?? 'https://accounts.zoho.com';
 const ZOHO_API_DOMAIN = process.env.ZOHO_API_DOMAIN ?? 'https://www.zohoapis.com';
 const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1552820728-8b83bb6b773f?q=80&w=600&auto=format&fit=crop';
@@ -9,6 +10,9 @@ const PER_PAGE = 200;
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
+// Raw Zoho items, not finished products: overrides are applied per request so
+// an admin edit is visible immediately, while the expensive part — paging the
+// whole Zoho catalogue — is still done at most once an hour per instance.
 let cachedProducts = null;
 let productsExpiresAt = 0;
 const PRODUCTS_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -193,15 +197,9 @@ const FALLBACK_PRODUCTS = [
   }
 ];
 
-  let overrides = {};
-  try {
-    const fs = await import('fs');
-    const path = await import('path');
-    const overridesPath = path.join(process.cwd(), 'overrides.json');
-    if (fs.existsSync(overridesPath)) {
-      overrides = JSON.parse(fs.readFileSync(overridesPath, 'utf8'));
-    }
-  } catch {}
+  // Overrides come from the Blob store when the admin panel has saved any, and
+  // from the committed overrides.json otherwise — see lib/overrides-store.js.
+  const overrides = await readOverrides();
 
   const orgId = process.env.ZOHO_ORG_ID;
   if (!orgId || !process.env.ZOHO_REFRESH_TOKEN) {
@@ -209,20 +207,24 @@ const FALLBACK_PRODUCTS = [
   }
 
   try {
-    if (cachedProducts && Date.now() < productsExpiresAt) {
-      res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-      return res.status(200).json({ products: cachedProducts });
+    let raw = cachedProducts && Date.now() < productsExpiresAt ? cachedProducts : null;
+    if (!raw) {
+      const token = await getAccessToken();
+      const items = await fetchAllItems(token, orgId);
+      raw = items.length > 0 ? items : FALLBACK_PRODUCTS;
+      cachedProducts = raw;
+      productsExpiresAt = Date.now() + PRODUCTS_TTL_MS;
     }
 
-    const token = await getAccessToken();
-    const items = await fetchAllItems(token, orgId);
-    const products = items.map((item, i) => normalizeItem(item, i, overrides));
+    // Overrides are applied per request, not baked into the cache: an admin
+    // edit has to show up on the next load, and caching the finished products
+    // would hide it for up to an hour.
+    const products = raw.map((item, i) => normalizeItem(item, i, overrides));
 
-    cachedProducts = products.length > 0 ? products : FALLBACK_PRODUCTS;
-    productsExpiresAt = Date.now() + PRODUCTS_TTL_MS;
-
-    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
-    return res.status(200).json({ products: cachedProducts });
+    // Likewise the CDN must not serve a shared copy — it would hand every
+    // visitor the catalogue as it looked before the edit.
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ products });
   } catch (err) {
     console.error('api/products error:', err);
     return res.status(200).json({ products: FALLBACK_PRODUCTS.map((p, i) => normalizeItem(p, i, overrides)) });
