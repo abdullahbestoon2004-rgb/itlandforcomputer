@@ -55,25 +55,28 @@ export default function Catalog({
     setExporting(true);
     setExportError(null);
     try {
-      const res = await fetch('/api/export.xlsx');
-      if (!res.ok) {
+      // Check the session first, without building the file.
+      const probe = await fetch('/api/export.xlsx', { method: 'HEAD' });
+      if (!probe.ok) {
         // Distinguish an expired session from a broken server: the sessions are
         // held in memory, so a restart logs you out while this tab still shows
         // the catalogue.
-        setExportError(res.status === 401
+        setExportError(probe.status === 401
           ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
-          : { message: `Export failed — the server returned ${res.status}.` });
+          : { message: `Export failed — the server returned ${probe.status}.` });
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      // Navigate to the endpoint rather than building a blob: URL.createObjectURL
+      // plus a download attribute is not honoured inside embedded browsers, which
+      // preview the blob instead of saving it. A plain navigation lets the
+      // server's Content-Disposition header drive a real download everywhere.
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `itland-catalogue-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.href = '/api/export.xlsx';
+      a.download = '';
+      a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
     } catch (err) {
       setExportError({ message: `Could not reach the server — ${err.message}.` });
     } finally {

@@ -834,6 +834,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- API: Excel export of the in-stock catalogue, grouped by brand ----
+  // A HEAD is the session pre-flight: it answers 200/401 without building the
+  // workbook, so the page can report an expired session before starting a
+  // download it cannot cancel.
+  if (pathn === "/api/export.xlsx" && req.method === "HEAD") {
+    res.writeHead(getSession(req) ? 200 : 401);
+    res.end();
+    return;
+  }
+
   if (pathn === "/api/export.xlsx" && req.method === "GET") {
     // This file is the entire wholesale price list, so it is the one product
     // route that requires a signed-in client. Sessions are in-memory, so a
