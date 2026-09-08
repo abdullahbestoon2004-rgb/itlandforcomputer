@@ -213,10 +213,27 @@ const ROUTES = {
   'attach-online-image': attachOnlineImage,
 };
 
+/**
+ * Which action was asked for.
+ *
+ * Read from the URL rather than from req.query.action. The catch-all's
+ * parameter is the documented way to get this, but on this deployment it
+ * arrives empty — every request answered "Unknown admin action: (none)" while
+ * plainly reaching the function — and the path is right there and unambiguous.
+ * req.query is still consulted first, so this keeps working if that changes.
+ */
+export function actionFrom(req) {
+  const fromQuery = [].concat(req.query?.action ?? []).filter(Boolean).join('/');
+  if (fromQuery) return fromQuery;
+  const path = String(req.url || '').split('?')[0];
+  const m = path.match(/\/api\/admin\/(.+)$/);
+  return m ? decodeURIComponent(m[1]).replace(/\/+$/, '') : '';
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const action = [].concat(req.query?.action ?? []).join('/');
+  const action = actionFrom(req);
   const route = ROUTES[action];
   if (!route) return res.status(404).json({ error: `Unknown admin action: ${action || '(none)'}` });
 
