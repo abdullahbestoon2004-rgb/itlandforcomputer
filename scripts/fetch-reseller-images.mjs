@@ -33,6 +33,16 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const RESELLERS = [
   { host: 'www.absoteck.com', sitemap: 'https://www.absoteck.com/product-sitemap.xml' },
   { host: 'www.techmann.at',  sitemap: 'https://www.techmann.at/product-sitemap.xml' },
+  // Paginated: WordPress caps each product sitemap at 1000 entries.
+  { host: 'www.imediastores.com', sitemap: 'https://www.imediastores.com/product-sitemap.xml' },
+  { host: 'www.imediastores.com', sitemap: 'https://www.imediastores.com/product-sitemap2.xml' },
+  { host: 'www.imediastores.com', sitemap: 'https://www.imediastores.com/product-sitemap3.xml' },
+  { host: 'www.imediastores.com', sitemap: 'https://www.imediastores.com/product-sitemap4.xml' },
+  // sinohala publishes only category pages in its sitemap, so its brand
+  // listings are paged through instead. It carries the deepest Onten range.
+  { host: 'sinohala.com', crawl: 'https://sinohala.com/brands/onten' },
+  // sinohala stocks Onten only; /brands/lention and /brands/amalink do not
+  // exist there and returned an unrelated page (a phone mount for a cable).
   { host: 'www.macfactory.in',    shopify: true },
   { host: 'macfactorystore.com',  shopify: true },
   { host: 'www.uniqkart.in',      shopify: true },
@@ -101,8 +111,33 @@ async function shopifyProducts(host) {
   return all;
 }
 
+/** Page through a brand listing, collecting product links. */
+async function crawlUrls(r) {
+  const key = r.crawl.replace(/[^A-Za-z0-9]+/g, '-').slice(-80);
+  const f = path.join(CACHE, `${key}.txt`);
+  if (fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs < 86400000) {
+    return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean);
+  }
+  const origin = new URL(r.crawl).origin;
+  const all = new Set();
+  for (let page = 1; page <= 15; page++) {
+    let html;
+    try { html = await get(page > 1 ? `${r.crawl}?page=${page}` : r.crawl); } catch { break; }
+    const before = all.size;
+    for (const l of html.match(/\/products\/[a-z0-9-]+/g) || []) all.add(origin + l);
+    if (all.size === before) break;   // a repeated page means the end
+  }
+  fs.mkdirSync(CACHE, { recursive: true });
+  const list = [...all];
+  fs.writeFileSync(f, list.join('\n'));
+  return list;
+}
+
 async function sitemapUrls(r) {
-  const f = path.join(CACHE, `${r.host}-products.txt`);
+  // Keyed on the sitemap URL, not the host: a paginated shop contributes
+  // several entries for the same host and they must not overwrite each other.
+  const key = r.sitemap.replace(/[^A-Za-z0-9]+/g, '-').slice(-80);
+  const f = path.join(CACHE, `${key}.txt`);
   if (fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs < 86400000) {
     return fs.readFileSync(f, 'utf8').split('\n').filter(Boolean);
   }
@@ -119,6 +154,7 @@ async function sitemapUrls(r) {
 /** The product photo, not the shop logo. */
 function galleryImage(html) {
   const m = html.match(/data-large_image=["']([^"']+)["']/)
+        || html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
         || html.match(/<img[^>]+class=["'][^"']*wp-post-image[^"']*["'][^>]+src=["']([^"']+)["']/)
         || html.match(/["'](https:\/\/[^"']+\/wp-content\/uploads\/[^"']+?)-?\d*x\d*\.(?:jpg|jpeg|png|webp)["']/);
   return m ? m[1] : null;
@@ -155,6 +191,8 @@ async function main() {
           const hay = `${p.title} ${p.handle} ${(p.variants || []).map(v => v.sku || '').join(' ')}`;
           for (const c of codesFor(hay)) if (!direct.has(c)) direct.set(c, { img: p.images[0].src.split('?')[0], page: `https://${r.host}/products/${p.handle}`, title: p.title });
         }
+      } else if (r.crawl) {
+        urls.push(...await crawlUrls(r));
       } else {
         urls.push(...await sitemapUrls(r));
       }
