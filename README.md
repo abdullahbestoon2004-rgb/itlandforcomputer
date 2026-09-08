@@ -234,12 +234,11 @@ Two things worth knowing:
 - **Both deployments serve it.** `server.cjs` reads the thumbnails from disk;
   `api/export.xlsx.js` fetches the same files over HTTP from its own deployment. Both call
   `lib/catalogue-workbook.js`, so the file is identical either way — verified byte for byte.
-- **The Node route requires a session; the serverless one cannot.** The file is the whole
-  wholesale price list, so `server.cjs` returns 401 without a session. Sessions live in that
-  process's memory and do not exist in a Vercel function, and `/api/products` there is
-  already unauthenticated, so gating only the spreadsheet would protect nothing. Restarting
-  the Node server logs clients out while their open tab still shows the catalogue — the UI
-  turns that 401 into a "sign in again" prompt rather than a silent failure.
+- **The export needs no session**, on either deployment. `/api/products` already serves the
+  whole catalogue unauthenticated, so gating the spreadsheet alone protected nothing while
+  breaking the download whenever the Node server's in-memory sessions were lost to a
+  restart. Locking the export down means locking down the product API with it — `getSession`
+  in `server.cjs` is the mechanism for doing both together. Admin routes remain protected.
 
 Brands are detected in [`lib/brands.js`](lib/brands.js), shared with the catalog's brand
 filter so the two always agree. Zoho carries no brand on any item, so it is read from the

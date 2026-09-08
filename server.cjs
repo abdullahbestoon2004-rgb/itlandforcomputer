@@ -654,6 +654,11 @@ const SESSION_MS = 8 * 60 * 60 * 1000; // 8 hours
 
 function makeToken() { return crypto.randomBytes(24).toString("hex"); }
 
+/**
+ * Client session lookup. Currently unused: no client route is gated, because
+ * /api/products serves the whole catalogue unauthenticated and the export was
+ * made to match. Kept as the mechanism for locking those down together.
+ */
 function getSession(req) {
   const cookie = req.headers.cookie || "";
   const m = cookie.match(/session=([a-f0-9]+)/);
@@ -735,7 +740,6 @@ const server = http.createServer(async (req, res) => {
 
   // ---- API: brands available to export, with counts ----
   if (pathn === "/api/export-brands" && req.method === "GET") {
-    if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
     const groups = groupByBrand(getItems().items.filter(it => it.k));
     send(res, 200, { brands: groups.map(g => ({ brand: g.brand, count: g.items.length })) });
     return;
@@ -746,18 +750,17 @@ const server = http.createServer(async (req, res) => {
   // workbook, so the page can report an expired session before starting a
   // download it cannot cancel.
   if (pathn === "/api/export.xlsx" && req.method === "HEAD") {
-    res.writeHead(getSession(req) ? 200 : 401);
+    res.writeHead(200);
     res.end();
     return;
   }
 
   if (pathn === "/api/export.xlsx" && req.method === "GET") {
-    // This file is the entire wholesale price list, so it is the one product
-    // route that requires a signed-in client. Sessions are in-memory, so a
-    // server restart invalidates them while the browser still has the catalogue
-    // open — the UI turns this 401 into "please sign in again" rather than a
-    // silent failure.
-    if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
+    // No session check, matching /api/products and the Vercel build of this
+    // route: the catalogue JSON is already served unauthenticated, so gating
+    // only the spreadsheet would protect nothing while breaking the download
+    // whenever the in-memory sessions were lost to a restart. Locking the
+    // export down means locking down the product API with it.
     try {
       // ?brands=Logitech,Onten selects a subset; absent means everything.
       const wanted = (url.searchParams.get("brands") || "")

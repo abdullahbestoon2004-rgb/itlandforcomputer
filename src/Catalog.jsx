@@ -63,9 +63,7 @@ export default function Catalog({
     try {
       const res = await fetch('/api/export-brands');
       if (!res.ok) {
-        setExportError(res.status === 401
-          ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
-          : { message: `Could not load brands — the server returned ${res.status}.` });
+        setExportError({ message: `Could not load brands — the server returned ${res.status}.` });
         return;
       }
       const data = await res.json();
@@ -100,9 +98,7 @@ export default function Catalog({
       const qs = allPicked ? '' : `?brands=${encodeURIComponent([...exportPicked].join(','))}`;
       const res = await fetch(`/api/export.xlsx${qs}`);
       if (!res.ok) {
-        setExportError(res.status === 401
-          ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
-          : { message: `Export failed — the server returned ${res.status}.` });
+        setExportError({ message: `Export failed — the server returned ${res.status}.` });
         return;
       }
       // Read the body in chunks so the progress bar reflects real transfer
@@ -211,7 +207,6 @@ export default function Catalog({
             {exportError && (
               <div style={{ margin:'12px 20px 0', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:13, fontWeight:600, color:'#8A2B18', background:'#FDEDE9', border:'1.5px solid #F9C5BB', borderRadius:10, padding:'9px 12px' }}>
                 <span>{exportError.message}</span>
-                {exportError.relogin && <button onClick={onLogout} style={{ padding:'5px 11px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', color:'#fff', background:'#17130E', border:'none', borderRadius:8, cursor:'pointer' }}>Sign in again</button>}
               </div>
             )}
 
