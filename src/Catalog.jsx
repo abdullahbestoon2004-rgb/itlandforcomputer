@@ -48,39 +48,98 @@ export default function Catalog({
   // Dell, UGREEN and Rapoo get a chip instead of being invisible.
   const brands = useMemo(() => brandsPresent(items), [items]);
 
-  const [exporting, setExporting] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportBrands, setExportBrands] = useState(null);   // [{brand, count}]
+  const [exportPicked, setExportPicked] = useState(new Set());
+  const [exportBusy, setExportBusy] = useState('');          // '' | 'loading' | 'building'
+  const [exportPct, setExportPct] = useState(0);
   const [exportError, setExportError] = useState(null);
 
-  const onExport = async () => {
-    setExporting(true);
+  const openExport = async () => {
+    setExportOpen(true);
     setExportError(null);
+    if (exportBrands) return;
+    setExportBusy('loading');
     try {
-      // Check the session first, without building the file.
-      const probe = await fetch('/api/export.xlsx', { method: 'HEAD' });
-      if (!probe.ok) {
-        // Distinguish an expired session from a broken server: the sessions are
-        // held in memory, so a restart logs you out while this tab still shows
-        // the catalogue.
-        setExportError(probe.status === 401
+      const res = await fetch('/api/export-brands');
+      if (!res.ok) {
+        setExportError(res.status === 401
           ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
-          : { message: `Export failed — the server returned ${probe.status}.` });
+          : { message: `Could not load brands — the server returned ${res.status}.` });
         return;
       }
-      // Navigate to the endpoint rather than building a blob: URL.createObjectURL
-      // plus a download attribute is not honoured inside embedded browsers, which
-      // preview the blob instead of saving it. A plain navigation lets the
-      // server's Content-Disposition header drive a real download everywhere.
-      const a = document.createElement('a');
-      a.href = '/api/export.xlsx';
-      a.download = '';
-      a.rel = 'noopener';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const data = await res.json();
+      setExportBrands(data.brands || []);
+      setExportPicked(new Set((data.brands || []).map(b => b.brand)));
     } catch (err) {
       setExportError({ message: `Could not reach the server — ${err.message}.` });
     } finally {
-      setExporting(false);
+      setExportBusy('');
+    }
+  };
+
+  const toggleBrand = (name) => setExportPicked(prev => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    return next;
+  });
+
+  const allPicked = exportBrands != null && exportPicked.size === exportBrands.length;
+  const pickedCount = (exportBrands || [])
+    .filter(b => exportPicked.has(b.brand))
+    .reduce((n, b) => n + b.count, 0);
+
+  const runExport = async () => {
+    if (!exportPicked.size) return;
+    setExportBusy('building');
+    setExportPct(0);
+    setExportError(null);
+    try {
+      // Everything selected means "no filter", which keeps the URL short and
+      // lets the server skip the brand comparison entirely.
+      const qs = allPicked ? '' : `?brands=${encodeURIComponent([...exportPicked].join(','))}`;
+      const res = await fetch(`/api/export.xlsx${qs}`);
+      if (!res.ok) {
+        setExportError(res.status === 401
+          ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
+          : { message: `Export failed — the server returned ${res.status}.` });
+        return;
+      }
+      // Read the body in chunks so the progress bar reflects real transfer
+      // rather than a spinner that means nothing.
+      const total = Number(res.headers.get('Content-Length')) || 0;
+      const reader = res.body?.getReader?.();
+      let blob;
+      if (reader) {
+        const parts = [];
+        let seen = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+          seen += value.length;
+          if (total) setExportPct(Math.min(99, Math.round((seen / total) * 100)));
+        }
+        blob = new Blob(parts, { type: res.headers.get('Content-Type') || 'application/octet-stream' });
+      } else {
+        blob = await res.blob();
+      }
+      setExportPct(100);
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `itland-catalogue-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the browser a moment to start the save before revoking.
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setExportOpen(false);
+    } catch (err) {
+      setExportError({ message: `Could not reach the server — ${err.message}.` });
+    } finally {
+      setExportBusy('');
     }
   };
 
@@ -139,15 +198,82 @@ export default function Catalog({
 
   return (
     <div>
+      {exportOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Export to Excel"
+          onClick={e => { if (e.target === e.currentTarget && !exportBusy) setExportOpen(false); }}
+          style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(23,19,14,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ width:'100%', maxWidth:520, maxHeight:'86vh', display:'flex', flexDirection:'column', background:'#FFFCF5', border:'2px solid #17130E', borderRadius:18, boxShadow:'6px 6px 0 #17130E', overflow:'hidden' }}>
+            <div style={{ padding:'18px 20px 12px', borderBottom:'1.5px solid #E9DFC9' }}>
+              <div style={{ fontSize:18, fontWeight:800, color:'#17130E' }}>Export to Excel</div>
+              <div style={{ fontSize:13, color:'#776E62', marginTop:3 }}>Choose which brands to include. In-stock items only.</div>
+            </div>
+
+            {exportError && (
+              <div style={{ margin:'12px 20px 0', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:13, fontWeight:600, color:'#8A2B18', background:'#FDEDE9', border:'1.5px solid #F9C5BB', borderRadius:10, padding:'9px 12px' }}>
+                <span>{exportError.message}</span>
+                {exportError.relogin && <button onClick={onLogout} style={{ padding:'5px 11px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', color:'#fff', background:'#17130E', border:'none', borderRadius:8, cursor:'pointer' }}>Sign in again</button>}
+              </div>
+            )}
+
+            {exportBusy === 'loading' && <div style={{ padding:'26px 20px', fontSize:13.5, color:'#776E62' }}>Loading brands…</div>}
+
+            {exportBrands && (
+              <>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'12px 20px 8px' }}>
+                  <button onClick={() => setExportPicked(allPicked ? new Set() : new Set(exportBrands.map(b => b.brand)))}
+                    style={{ padding:'7px 13px', fontSize:13, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:9, cursor:'pointer' }}>
+                    {allPicked ? 'Clear all' : 'Select all'}
+                  </button>
+                  <div style={{ fontSize:13, color:'#776E62' }}>
+                    <b style={{ color:'#17130E' }}>{exportPicked.size}</b> of {exportBrands.length} brands · <b style={{ color:'#17130E' }}>{pickedCount}</b> items
+                  </div>
+                </div>
+
+                <div style={{ overflowY:'auto', padding:'0 20px 8px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px, 1fr))', gap:6 }}>
+                  {exportBrands.map(b => (
+                    <label key={b.brand} style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px', fontSize:13.5, background:exportPicked.has(b.brand) ? '#F4EFE3' : '#fff', border:'1.5px solid #E9DFC9', borderRadius:10, cursor:'pointer' }}>
+                      <input type="checkbox" checked={exportPicked.has(b.brand)} onChange={() => toggleBrand(b.brand)}
+                        style={{ width:16, height:16, accentColor:'var(--pri)', cursor:'pointer', flexShrink:0 }} />
+                      <span style={{ fontWeight:600, color:'#2B2419', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.brand}</span>
+                      <span style={{ marginLeft:'auto', fontSize:12.5, fontWeight:700, color:'#8B8071' }}>{b.count}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {exportBusy === 'building' && (
+              <div style={{ padding:'12px 20px 0' }}>
+                <div style={{ fontSize:13, fontWeight:600, color:'#2B2419', marginBottom:6 }}>
+                  Building your spreadsheet… {exportPct > 0 ? `${exportPct}%` : ''}
+                </div>
+                <div style={{ height:8, background:'#EFE7D8', borderRadius:99, overflow:'hidden' }}>
+                  <div style={{ height:'100%', width:`${exportPct || 8}%`, background:'var(--pri)', borderRadius:99, transition:'width .2s ease' }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop:'auto', display:'flex', gap:10, justifyContent:'flex-end', padding:'14px 20px', borderTop:'1.5px solid #E9DFC9' }}>
+              <button onClick={() => setExportOpen(false)} disabled={!!exportBusy}
+                style={{ padding:'10px 16px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:11, cursor:exportBusy?'default':'pointer', opacity: exportBusy ? 0.6 : 1 }}>Cancel</button>
+              <button onClick={runExport} disabled={!!exportBusy || !exportPicked.size}
+                style={{ padding:'10px 18px', fontSize:14, fontWeight:800, fontFamily:'inherit', color:'#fff', background:(exportBusy || !exportPicked.size) ? '#B9AE9B' : 'var(--pri)', border:'none', borderRadius:11, cursor:(exportBusy || !exportPicked.size)?'default':'pointer' }}>
+                {exportBusy === 'building' ? 'Preparing…' : `Export ${pickedCount || ''} item${pickedCount === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ height:4, background:'var(--pri)' }} />
       <header style={{ position:'sticky', top:0, zIndex:20, background:'rgba(255,252,245,.92)', backdropFilter:'blur(10px)', borderBottom:'1.5px solid #E9DFC9' }}>
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'14px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:30, width:'auto' }} />
           <div style={{ flex:1 }} />
-          <button onClick={onExport} disabled={exporting} title="Export the in-stock catalogue to Excel"
-            style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:exporting?'#8B8071':'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:exporting?'default':'pointer' }}>
+          <button onClick={openExport} title="Export the in-stock catalogue to Excel"
+            style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span className="hide-xs">{exporting ? 'Preparing…' : 'Export to Excel'}</span>
+            <span className="hide-xs">Export to Excel</span>
           </button>
           <button onClick={onAdminClick} title="Admin Panel" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:38, padding:0, color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -157,16 +283,6 @@ export default function Catalog({
             <span className="hide-xs">{t.logout}</span>
           </button>
         </div>
-        {exportError && (
-          <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 10px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', fontSize:13, fontWeight:600, color:'#8A2B18', background:'#FDEDE9', border:'1.5px solid #F9C5BB', borderRadius:10, padding:'9px 12px' }}>
-              <span>{exportError.message}</span>
-              {exportError.relogin && (
-                <button onClick={onLogout} style={{ padding:'5px 11px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', color:'#fff', background:'#17130E', border:'none', borderRadius:8, cursor:'pointer' }}>Sign in again</button>
-              )}
-            </div>
-          </div>
-        )}
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 14px' }}>
           <div style={{ position:'relative', maxWidth:560 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

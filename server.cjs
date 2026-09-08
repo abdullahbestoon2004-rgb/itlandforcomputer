@@ -733,6 +733,14 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---- API: brands available to export, with counts ----
+  if (pathn === "/api/export-brands" && req.method === "GET") {
+    if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
+    const groups = groupByBrand(getItems().items.filter(it => it.k));
+    send(res, 200, { brands: groups.map(g => ({ brand: g.brand, count: g.items.length })) });
+    return;
+  }
+
   // ---- API: Excel export of the in-stock catalogue, grouped by brand ----
   // A HEAD is the session pre-flight: it answers 200/401 without building the
   // workbook, so the page can report an expired session before starting a
@@ -751,7 +759,11 @@ const server = http.createServer(async (req, res) => {
     // silent failure.
     if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
     try {
-      const buf = await buildCatalogueWorkbook(getItems().items.filter(it => it.k), loadThumbFromDisk);
+      // ?brands=Logitech,Onten selects a subset; absent means everything.
+      const wanted = (url.searchParams.get("brands") || "")
+        .split(",").map(b => b.trim()).filter(Boolean);
+      const buf = await buildCatalogueWorkbook(
+        getItems().items.filter(it => it.k), loadThumbFromDisk, wanted);
       res.writeHead(200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${exportFilename()}"`,

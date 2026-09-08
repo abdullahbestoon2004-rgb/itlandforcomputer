@@ -50,7 +50,10 @@ export default async function handler(req, res) {
       return buf;
     };
 
-    const file = await buildCatalogueWorkbook(items, loadThumb);
+    // ?brands=Logitech,Onten selects a subset; absent means everything.
+    const raw = new URL(req.url, origin).searchParams.get('brands') || '';
+    const wanted = raw.split(',').map(b => b.trim()).filter(Boolean);
+    const file = await buildCatalogueWorkbook(items, loadThumb, wanted);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${exportFilename()}"`);
     res.setHeader('Content-Length', file.length);

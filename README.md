@@ -206,9 +206,16 @@ in order, each has a 10-second timeout, and `/api/admin/search-images` returns a
 
 ## Excel export
 
-Signed-in clients can download the in-stock catalogue as a single `.xlsx` from the **Export
-to Excel** button in the catalog header. `GET /api/export.xlsx` builds it server-side with
-`exceljs`.
+Signed-in clients download the in-stock catalogue as a single `.xlsx` from the **Export to
+Excel** button in the catalog header. It opens a dialog listing every brand with its
+in-stock count and a select-all toggle; `GET /api/export.xlsx?brands=Logitech,Onten`
+builds the file server-side with `exceljs`, and omitting the parameter exports everything.
+`GET /api/export-brands` supplies the list.
+
+The browser reads the response body in chunks so the progress bar reflects real transfer
+rather than an indeterminate spinner. That means the file arrives as a Blob and is saved
+through a `download` link — which ordinary browsers honour, though some embedded browsers
+preview it instead of saving.
 
 The sheet is one worksheet with each brand introduced by its own heading row, followed by
 that brand's products: image, name, code, barcode, wholesale and retail price, stock,
