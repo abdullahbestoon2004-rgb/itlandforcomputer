@@ -204,6 +204,36 @@ in order, each has a 10-second timeout, and `/api/admin/search-images` returns a
 
 ---
 
+## Excel export
+
+Signed-in clients can download the in-stock catalogue as a single `.xlsx` from the **Export
+to Excel** button in the catalog header. `GET /api/export.xlsx` builds it server-side with
+`exceljs`.
+
+The sheet is one worksheet with each brand introduced by its own heading row, followed by
+that brand's products: image, name, code, barcode, wholesale and retail price, stock,
+status, category and description. Prices carry a currency number format so they can be
+totalled.
+
+Two things worth knowing:
+
+- **Product images are converted on the way in.** Excel does not reliably render WebP and
+  every asset is WebP, so each one is decoded to a small PNG with `dwebp` and cached under
+  `.image-fetch-cache/xlsx-png/`. The first export pays that cost (~1s for 200 images);
+  later ones reuse the cache. A missing image never fails the download.
+- **This is the one product route that requires a session.** The file is the whole
+  wholesale price list, so it returns 401 without one. Sessions are held in memory, so
+  restarting the server logs clients out while their open tab still shows the catalogue —
+  the UI turns that 401 into a "sign in again" prompt rather than a silent failure.
+
+Brands are detected in [`lib/brands.js`](lib/brands.js), shared with the catalog's brand
+filter so the two always agree. Zoho carries no brand on any item, so it is read from the
+product name, SKU, then description, matching whole words only and preferring the earliest
+mention — the maker leads a product name, while other brands appear later as compatibility
+claims ("Poly Sync 20+ **Microsoft** Teams" is a Poly product).
+
+---
+
 ## Keeping data fresh
 
 - **Stock & new items:** automatic — the server re-syncs from Zoho every 5 minutes.

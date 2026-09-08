@@ -1,36 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StockBadge, priceLabel } from './components.jsx';
 import { PAGE } from './i18n.js';
-
-const BRAND_ALIASES = {
-  logitech: ['logitech', 'logi', 'ultimate ears', 'ue'],
-  poly: ['poly', 'plantronics', 'polycom'],
-  anker: ['anker', 'eufy', 'soundcore'],
-  jabra: ['jabra'],
-  jbl: ['jbl'],
-  onten: ['onten'],
-  lention: ['lention'],
-};
-
-function matchesBrand(it, targetBrand) {
-  if (!targetBrand) return true;
-  const brandLower = targetBrand.toLowerCase().trim();
-
-  // 1. Direct match on item.brand property
-  if (it.brand && it.brand.toLowerCase().trim() === brandLower) {
-    return true;
-  }
-
-  // 2. Search in product fields using brand aliases
-  const aliases = BRAND_ALIASES[brandLower] || [brandLower];
-  const fullText = `${it.n || ''} ${it.d || ''} ${it.sku || ''} ${it.s || ''} ${it.barcode || ''} ${it.brand || ''}`.toLowerCase();
-
-  return aliases.some(alias => {
-    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(?:^|\\W)${escaped}(?:$|\\W)`, 'i');
-    return regex.test(fullText) || fullText.includes(alias);
-  });
-}
+import { matchesBrand, brandsPresent } from '../lib/brands.js';
 
 function matchesSearch(it, query) {
   if (!query) return true;
@@ -73,19 +44,42 @@ export default function Catalog({
   visible, setVisible, onLogout, onOpen, onAdminClick,
 }) {
 
-  const brands = useMemo(() => {
-    const defaultBrands = ['Logitech', 'Anker', 'Onten', 'Lention', 'Poly', 'Jabra', 'JBL'];
-    const brandSet = new Set(defaultBrands);
-    (items || []).forEach(it => {
-      if (it.brand && typeof it.brand === 'string') {
-        const b = it.brand.trim();
-        if (b && !Array.from(brandSet).some(existing => existing.toLowerCase() === b.toLowerCase())) {
-          brandSet.add(b);
-        }
+  // Derived from the items themselves rather than a fixed list, so brands like
+  // Dell, UGREEN and Rapoo get a chip instead of being invisible.
+  const brands = useMemo(() => brandsPresent(items), [items]);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(null);
+
+  const onExport = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await fetch('/api/export.xlsx');
+      if (!res.ok) {
+        // Distinguish an expired session from a broken server: the sessions are
+        // held in memory, so a restart logs you out while this tab still shows
+        // the catalogue.
+        setExportError(res.status === 401
+          ? { message: 'Your session has expired. Sign in again to download the catalogue.', relogin: true }
+          : { message: `Export failed — the server returned ${res.status}.` });
+        return;
       }
-    });
-    return Array.from(brandSet);
-  }, [items]);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `itland-catalogue-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError({ message: `Could not reach the server — ${err.message}.` });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Pre-filtered (brand + stock + search) — used for category counts
   const preFiltered = useMemo(() => {
@@ -147,6 +141,11 @@ export default function Catalog({
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'14px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:30, width:'auto' }} />
           <div style={{ flex:1 }} />
+          <button onClick={onExport} disabled={exporting} title="Export the in-stock catalogue to Excel"
+            style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:exporting?'#8B8071':'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:exporting?'default':'pointer' }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span className="hide-xs">{exporting ? 'Preparing…' : 'Export to Excel'}</span>
+          </button>
           <button onClick={onAdminClick} title="Admin Panel" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:38, padding:0, color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
@@ -155,6 +154,16 @@ export default function Catalog({
             <span className="hide-xs">{t.logout}</span>
           </button>
         </div>
+        {exportError && (
+          <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 10px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', fontSize:13, fontWeight:600, color:'#8A2B18', background:'#FDEDE9', border:'1.5px solid #F9C5BB', borderRadius:10, padding:'9px 12px' }}>
+              <span>{exportError.message}</span>
+              {exportError.relogin && (
+                <button onClick={onLogout} style={{ padding:'5px 11px', fontSize:12.5, fontWeight:700, fontFamily:'inherit', color:'#fff', background:'#17130E', border:'none', borderRadius:8, cursor:'pointer' }}>Sign in again</button>
+              )}
+            </div>
+          </div>
+        )}
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'0 20px 14px' }}>
           <div style={{ position:'relative', maxWidth:560 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>

@@ -41,6 +41,7 @@ const ZOHO_API_DOMAIN       = process.env.ZOHO_API_DOMAIN       || CONFIG.ZOHO_A
 const WHOLESALE_FIELD       = process.env.WHOLESALE_FIELD       || CONFIG.WHOLESALE_FIELD;
 const SYNC_INTERVAL_MINUTES = process.env.SYNC_INTERVAL_MINUTES || CONFIG.SYNC_INTERVAL_MINUTES || 5;
 const { loadClients, findClient, toClientProfile } = require("./lib/clients.js");
+const { groupByBrand } = require("./lib/brands.js");
 const CLIENTS = CONFIG.CLIENTS || loadClients(process.env);
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || CONFIG.ADMIN_USERNAME || "admin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || CONFIG.ADMIN_PASSWORD;
@@ -632,6 +633,121 @@ function describeSearchFailure(attempts) {
   return `Image search failed — ${detail}.${hint}`;
 }
 
+// ============ Excel export ============
+const ExcelJS = require("exceljs");
+const { execFileSync } = require("child_process");
+
+const XLSX_PNG_CACHE = path.join(__dirname, ".image-fetch-cache", "xlsx-png");
+const XLSX_IMG_PX = 64;            // rendered size of the image column
+const XLSX_ROW_HEIGHT = 50;        // points; roughly matches XLSX_IMG_PX
+
+const XLSX_COLUMNS = [
+  { header: "Image",       key: "img",       width: 11 },
+  { header: "Product",     key: "name",      width: 52 },
+  { header: "Code / SKU",  key: "sku",       width: 20 },
+  { header: "Barcode",     key: "barcode",   width: 18 },
+  { header: "Wholesale",   key: "wholesale", width: 13, money: true },
+  { header: "Retail",      key: "retail",    width: 13, money: true },
+  { header: "Stock",       key: "stock",     width: 9 },
+  { header: "Status",      key: "status",    width: 12 },
+  { header: "Category",    key: "category",  width: 20 },
+  { header: "Description", key: "desc",      width: 60 },
+];
+
+/**
+ * Excel will not reliably render WebP, and every product image is WebP, so each
+ * one is decoded to a small PNG. The result is cached because a single export
+ * touches ~200 images and the conversion is the slow part; later exports reuse
+ * the cache. Returns null when the source is missing or dwebp is unavailable —
+ * a missing picture must never fail the whole download.
+ */
+function productImagePng(imgPath) {
+  if (!imgPath) return null;
+  const file = path.basename(imgPath);
+  if (!/^[A-Za-z0-9._-]+\.webp$/i.test(file)) return null;
+  const src = path.join(IMAGE_DIR, file);
+  if (!fs.existsSync(src)) return null;
+  const dest = path.join(XLSX_PNG_CACHE, file.replace(/\.webp$/i, ".png"));
+  try {
+    if (!fs.existsSync(dest) || fs.statSync(dest).mtimeMs < fs.statSync(src).mtimeMs) {
+      fs.mkdirSync(XLSX_PNG_CACHE, { recursive: true });
+      execFileSync("dwebp", ["-quiet", "-resize", String(XLSX_IMG_PX * 2), "0", src, "-o", dest]);
+    }
+    return fs.readFileSync(dest);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One sheet, each brand introduced by its own heading row and followed by its
+ * products. In-stock items only — the catalogue defaults to in stock, and an
+ * out-of-stock line is not something a client can order from.
+ */
+async function buildCatalogueWorkbook() {
+  const items = getItems().items.filter(it => it.k);
+  const groups = groupByBrand(items);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "iTLand Wholesale Portal";
+  wb.created = new Date();
+  const ws = wb.addWorksheet("Catalogue", {
+    views: [{ state: "frozen", ySplit: 1 }],
+    properties: { defaultRowHeight: 18 },
+  });
+  ws.columns = XLSX_COLUMNS.map(c => ({ key: c.key, width: c.width }));
+
+  const title = ws.addRow([`iTLand wholesale catalogue — ${items.length} items in stock — ${new Date().toISOString().slice(0, 10)}`]);
+  title.font = { bold: true, size: 14 };
+  ws.mergeCells(title.number, 1, title.number, XLSX_COLUMNS.length);
+  ws.addRow([]);
+
+  for (const group of groups) {
+    const head = ws.addRow([`${group.brand}  (${group.items.length})`]);
+    head.font = { bold: true, size: 12, color: { argb: "FFFFFFFF" } };
+    head.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17130E" } };
+    head.height = 22;
+    ws.mergeCells(head.number, 1, head.number, XLSX_COLUMNS.length);
+
+    const cols = ws.addRow(XLSX_COLUMNS.map(c => c.header));
+    cols.font = { bold: true };
+    cols.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF1EADC" } };
+
+    for (const it of group.items) {
+      const row = ws.addRow({
+        img: "",
+        name: it.n || it.name || "",
+        sku: it.s || it.sku || "",
+        barcode: it.barcode || "",
+        wholesale: it.p == null ? null : Number(it.p),
+        retail: it.retail == null ? null : Number(it.retail),
+        stock: Number(it.stock || 0),
+        status: it.k ? "In stock" : "Out of stock",
+        category: it.category || "",
+        desc: it.d || it.description || "",
+      });
+      for (const [i, c] of XLSX_COLUMNS.entries()) {
+        if (c.money) row.getCell(i + 1).numFmt = '"$"#,##0.00';
+      }
+      row.alignment = { vertical: "middle", wrapText: false };
+
+      const png = productImagePng(it.img);
+      if (png) {
+        row.height = XLSX_ROW_HEIGHT;
+        const id = wb.addImage({ buffer: png, extension: "png" });
+        ws.addImage(id, {
+          tl: { col: 0.15, row: row.number - 1 + 0.1 },
+          ext: { width: XLSX_IMG_PX, height: XLSX_IMG_PX },
+          editAs: "oneCell",
+        });
+      }
+    }
+    ws.addRow([]);
+  }
+
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
 // ============ simple session auth ============
 const sessions = new Map(); // token -> { user, exp }
 const SESSION_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -713,6 +829,31 @@ const server = http.createServer(async (req, res) => {
       });
     } else {
       send(res, 401, { ok: false, success: false, error: "invalid" });
+    }
+    return;
+  }
+
+  // ---- API: Excel export of the in-stock catalogue, grouped by brand ----
+  if (pathn === "/api/export.xlsx" && req.method === "GET") {
+    // This file is the entire wholesale price list, so it is the one product
+    // route that requires a signed-in client. Sessions are in-memory, so a
+    // server restart invalidates them while the browser still has the catalogue
+    // open — the UI turns this 401 into "please sign in again" rather than a
+    // silent failure.
+    if (!getSession(req)) { send(res, 401, { error: "Sign in again to export." }); return; }
+    try {
+      const buf = await buildCatalogueWorkbook();
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="itland-catalogue-${stamp}.xlsx"`,
+        "Content-Length": buf.length,
+        "Cache-Control": "no-store",
+      });
+      res.end(buf);
+    } catch (e) {
+      console.error("  export failed:", e.message);
+      send(res, 500, { error: `Could not build the export: ${e.message}` });
     }
     return;
   }
