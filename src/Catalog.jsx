@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StockBadge, priceLabel } from './components.jsx';
 import { PAGE } from './i18n.js';
 import { matchesBrand, brandsPresent } from '../lib/brands.js';
@@ -47,6 +47,8 @@ export default function Catalog({
   // Derived from the items themselves rather than a fixed list, so brands like
   // Dell, UGREEN and Rapoo get a chip instead of being invisible.
   const brands = useMemo(() => brandsPresent(items), [items]);
+
+  const searchRef = useRef(null);
 
   const [exportOpen, setExportOpen] = useState(false);
   const [exportBrands, setExportBrands] = useState(null);   // [{brand, count}]
@@ -282,6 +284,7 @@ export default function Catalog({
           <div style={{ position:'relative', maxWidth:560 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B8071" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input
+              ref={searchRef}
               className="inp" type="text" value={query}
               onChange={e => { setQuery(e.target.value); setVisible(PAGE); }}
               placeholder={t.searchPh}
@@ -289,7 +292,13 @@ export default function Catalog({
             />
             {query && (
               <button
-                onClick={() => { setQuery(''); setVisible(PAGE); }}
+                type="button"
+                aria-label="Clear search"
+                // Keep the caret in the field: the button unmounts as soon as the
+                // query is empty, so without this the focus would be lost to the
+                // body and you would have to click back into the input to type.
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => { setQuery(''); setVisible(PAGE); searchRef.current?.focus(); }}
                 style={{ position:'absolute', right:12, top:'50%', transform:'translateY(-50%)', display:'flex', alignItems:'center', justifyContent:'center', width:24, height:24, padding:0, background:'#D6CDBB', border:'none', borderRadius:'50%', cursor:'pointer', color:'#2B2419' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
