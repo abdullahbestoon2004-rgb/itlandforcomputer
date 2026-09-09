@@ -634,13 +634,22 @@ function describeSearchFailure(attempts) {
   return `Image search failed — ${detail}.${hint}`;
 }
 
-// ============ Excel export ============
-// The workbook itself is built in lib/catalogue-workbook.js, shared with the
-// Vercel function so both deployments produce the same file. Thumbnails are
-// pre-built by scripts/build-xlsx-thumbs.mjs — Excel will not reliably render
-// the WebP product images, and converting them at request time needed dwebp,
-// which does not exist in a serverless runtime.
-const { buildCatalogueWorkbook, exportFilename } = require("./lib/catalogue-workbook.js");
+// ============ catalogue exports ============
+// Three formats, all shaped by lib/catalogue-rows.js so they agree with each
+// other, and all shared with the Vercel functions so both deployments produce
+// the same output:
+//
+//   .xlsx        lib/catalogue-workbook.js  — pictures embedded in the sheet
+//   .csv         lib/catalogue-csv.js       — for Google Sheets
+//   print page   lib/catalogue-print.js     — the browser saves it as PDF
+//
+// The Excel thumbnails are pre-built by scripts/build-xlsx-thumbs.mjs: Excel
+// will not reliably render the WebP product images, and converting them at
+// request time needed dwebp, which does not exist in a serverless runtime.
+const { buildCatalogueWorkbook } = require("./lib/catalogue-workbook.js");
+const { buildCatalogueCsv } = require("./lib/catalogue-csv.js");
+const { buildCataloguePrintPage } = require("./lib/catalogue-print.js");
+const { exportFilename } = require("./lib/catalogue-rows.js");
 const XLSX_THUMB_DIR = path.join(__dirname, "public", "assets", "xlsx-thumbs");
 
 function loadThumbFromDisk(name) {
@@ -770,13 +779,62 @@ const server = http.createServer(async (req, res) => {
         getItems().items.filter(it => it.k), loadThumbFromDisk, wanted);
       res.writeHead(200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${exportFilename()}"`,
+        "Content-Disposition": `attachment; filename="${exportFilename("xlsx")}"`,
         "Content-Length": buf.length,
         "Cache-Control": "no-store",
       });
       res.end(buf);
     } catch (e) {
       console.error("  export failed:", e.message);
+      send(res, 500, { error: `Could not build the export: ${e.message}` });
+    }
+    return;
+  }
+
+  // ---- API: Google Sheets export (CSV) of the in-stock catalogue ----
+  if (pathn === "/api/export.csv" && req.method === "HEAD") {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  if (pathn === "/api/export.csv" && req.method === "GET") {
+    // Unauthenticated for the same reason as the .xlsx route above.
+    try {
+      const wanted = (url.searchParams.get("brands") || "")
+        .split(",").map(b => b.trim()).filter(Boolean);
+      // The picture is an =IMAGE() formula, so the URL inside it has to be
+      // absolute — hence the origin rather than a site-relative path.
+      const proto = (req.headers["x-forwarded-proto"] || "http").split(",")[0];
+      const site = `${proto}://${req.headers["x-forwarded-host"] || req.headers.host}`;
+      const csv = Buffer.from(
+        buildCatalogueCsv(getItems().items.filter(it => it.k), wanted, site), "utf8");
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${exportFilename("csv")}"`,
+        "Content-Length": csv.length,
+        "Cache-Control": "no-store",
+      });
+      res.end(csv);
+    } catch (e) {
+      console.error("  csv export failed:", e.message);
+      send(res, 500, { error: `Could not build the export: ${e.message}` });
+    }
+    return;
+  }
+
+  // ---- API: PDF export — a print-styled page the browser saves as PDF ----
+  // Served as HTML, not a file, which is why the page opens it in a tab.
+  if (pathn === "/api/export-print" && (req.method === "GET" || req.method === "HEAD")) {
+    if (req.method === "HEAD") { res.writeHead(200); res.end(); return; }
+    try {
+      const wanted = (url.searchParams.get("brands") || "")
+        .split(",").map(b => b.trim()).filter(Boolean);
+      const html = buildCataloguePrintPage(getItems().items.filter(it => it.k), wanted);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+      res.end(html);
+    } catch (e) {
+      console.error("  print export failed:", e.message);
       send(res, 500, { error: `Could not build the export: ${e.message}` });
     }
     return;

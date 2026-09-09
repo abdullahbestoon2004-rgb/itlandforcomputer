@@ -1,4 +1,6 @@
-import { buildCatalogueWorkbook, exportFilename } from '../lib/catalogue-workbook.js';
+import { buildCatalogueWorkbook } from '../lib/catalogue-workbook.js';
+import { exportFilename } from '../lib/catalogue-rows.js';
+import { resolveOrigin, fetchInStockItems, requestedBrands } from '../lib/export-request.js';
 
 /**
  * Excel export for the Vercel deployment.
@@ -24,18 +26,9 @@ export default async function handler(req, res) {
   // The frontend probes with HEAD before starting a download it cannot cancel.
   if (req.method === 'HEAD') return res.status(200).end();
 
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const origin = `${proto}://${host}`;
-
+  const origin = resolveOrigin(req);
   try {
-    const listed = await fetch(`${origin}/api/products`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!listed.ok) throw new Error(`products endpoint returned ${listed.status}`);
-    const data = await listed.json();
-    const items = (data.products || data.items || []).filter(it => it.k ?? it.in_stock);
+    const items = await fetchInStockItems(origin);
 
     // One fetch per distinct thumbnail, cached for the life of the request.
     const cache = new Map();
@@ -50,12 +43,9 @@ export default async function handler(req, res) {
       return buf;
     };
 
-    // ?brands=Logitech,Onten selects a subset; absent means everything.
-    const raw = new URL(req.url, origin).searchParams.get('brands') || '';
-    const wanted = raw.split(',').map(b => b.trim()).filter(Boolean);
-    const file = await buildCatalogueWorkbook(items, loadThumb, wanted);
+    const file = await buildCatalogueWorkbook(items, loadThumb, requestedBrands(req, origin));
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${exportFilename()}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${exportFilename('xlsx')}"`);
     res.setHeader('Content-Length', file.length);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).send(file);

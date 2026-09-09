@@ -24,6 +24,22 @@ const CATEGORIES = [
   { id: 'video',    label: 'Video Conference', keys: ['webcam', 'cam', 'conference', 'meetup', 'rally', 'brio', 'streamcam', 'speak2', 'speak 5', 'poly sync', 'tap ip', 'scribe', 'vc'] },
 ];
 
+/**
+ * The three export formats.
+ *
+ * `id` doubles as the route suffix and the file extension for the two
+ * downloads; the PDF is not a download at all but a print-styled page the
+ * browser turns into a PDF, which is why it opens in a tab instead.
+ */
+const EXPORT_FORMATS = [
+  { id: 'xlsx', label: 'Excel workbook', tag: '.xlsx',
+    note: 'Grouped by brand, with the product photos embedded in the sheet.' },
+  { id: 'csv', label: 'Google Sheets', tag: '.csv',
+    note: 'Import it with File \u2192 Import. Photos arrive as live images, which an .xlsx loses on the way in.' },
+  { id: 'pdf', label: 'PDF price list', tag: 'print',
+    note: 'Opens a print-ready page. Pick \u201cSave as PDF\u201d as the destination.' },
+];
+
 function matchesCategory(it, catId) {
   if (!catId) return true;
   const cat = CATEGORIES.find(c => c.id === catId);
@@ -56,6 +72,7 @@ export default function Catalog({
   const [exportBusy, setExportBusy] = useState('');          // '' | 'loading' | 'building'
   const [exportPct, setExportPct] = useState(0);
   const [exportError, setExportError] = useState(null);
+  const [exportFormat, setExportFormat] = useState('xlsx');
 
   const openExport = async () => {
     setExportOpen(true);
@@ -91,14 +108,24 @@ export default function Catalog({
 
   const runExport = async () => {
     if (!exportPicked.size) return;
+    // Everything selected means "no filter", which keeps the URL short and
+    // lets the server skip the brand comparison entirely.
+    const qs = allPicked ? '' : `?brands=${encodeURIComponent([...exportPicked].join(','))}`;
+
+    // The PDF is a page the browser prints rather than a file it downloads, so
+    // there is nothing to stream. The window has to be opened straight out of
+    // the click: open it after an await and the popup blocker takes it.
+    if (exportFormat === 'pdf') {
+      window.open(`/api/export-print${qs}`, '_blank', 'noopener');
+      setExportOpen(false);
+      return;
+    }
+
     setExportBusy('building');
     setExportPct(0);
     setExportError(null);
     try {
-      // Everything selected means "no filter", which keeps the URL short and
-      // lets the server skip the brand comparison entirely.
-      const qs = allPicked ? '' : `?brands=${encodeURIComponent([...exportPicked].join(','))}`;
-      const res = await fetch(`/api/export.xlsx${qs}`);
+      const res = await fetch(`/api/export.${exportFormat}${qs}`);
       if (!res.ok) {
         setExportError({ message: `Export failed — the server returned ${res.status}.` });
         return;
@@ -127,7 +154,7 @@ export default function Catalog({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `itland-catalogue-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `itland-catalogue-${new Date().toISOString().slice(0, 10)}.${exportFormat}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -197,13 +224,13 @@ export default function Catalog({
   return (
     <div>
       {exportOpen && (
-        <div role="dialog" aria-modal="true" aria-label="Export to Excel"
+        <div role="dialog" aria-modal="true" aria-label="Export catalogue"
           onClick={e => { if (e.target === e.currentTarget && !exportBusy) setExportOpen(false); }}
           style={{ position:'fixed', inset:0, zIndex:100, background:'rgba(23,19,14,.45)', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
           <div style={{ width:'100%', maxWidth:520, maxHeight:'86vh', display:'flex', flexDirection:'column', background:'#FFFCF5', border:'2px solid #17130E', borderRadius:18, boxShadow:'6px 6px 0 #17130E', overflow:'hidden' }}>
             <div style={{ padding:'18px 20px 12px', borderBottom:'1.5px solid #E9DFC9' }}>
-              <div style={{ fontSize:18, fontWeight:800, color:'#17130E' }}>Export to Excel</div>
-              <div style={{ fontSize:13, color:'#776E62', marginTop:3 }}>Choose which brands to include. In-stock items only.</div>
+              <div style={{ fontSize:18, fontWeight:800, color:'#17130E' }}>Export catalogue</div>
+              <div style={{ fontSize:13, color:'#776E62', marginTop:3 }}>Pick a format and the brands to include. In-stock items only.</div>
             </div>
 
             {exportError && (
@@ -211,6 +238,26 @@ export default function Catalog({
                 <span>{exportError.message}</span>
               </div>
             )}
+
+            <div role="radiogroup" aria-label="Export format" style={{ display:'grid', gap:7, padding:'14px 20px 2px' }}>
+              {EXPORT_FORMATS.map(f => {
+                const on = exportFormat === f.id;
+                return (
+                  <button key={f.id} role="radio" aria-checked={on} disabled={!!exportBusy}
+                    onClick={() => setExportFormat(f.id)}
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', fontFamily:'inherit', textAlign:'left', background:on ? '#F4EFE3' : '#fff', border:`1.5px solid ${on ? '#17130E' : '#E9DFC9'}`, borderRadius:11, cursor:exportBusy ? 'default' : 'pointer' }}>
+                    <span aria-hidden="true" style={{ flexShrink:0, marginTop:2, width:14, height:14, borderRadius:'50%', border:`1.5px solid ${on ? '#17130E' : '#C9BEA6'}`, background:on ? '#17130E' : '#fff', boxShadow:on ? 'inset 0 0 0 2.5px #F4EFE3' : 'none' }} />
+                    <span style={{ minWidth:0 }}>
+                      <span style={{ display:'flex', alignItems:'center', gap:7, fontSize:14, fontWeight:700, color:'#17130E' }}>
+                        {f.label}
+                        <span style={{ fontSize:10.5, fontWeight:700, fontFamily:"'Space Mono',monospace", color:'#776E62', background:'#F1EADC', border:'1px solid #E0D5BE', borderRadius:5, padding:'1px 5px' }}>{f.tag}</span>
+                      </span>
+                      <span style={{ display:'block', marginTop:2, fontSize:12.5, lineHeight:1.4, color:'#776E62' }}>{f.note}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
             {exportBusy === 'loading' && <div style={{ padding:'26px 20px', fontSize:13.5, color:'#776E62' }}>Loading brands…</div>}
 
@@ -242,7 +289,7 @@ export default function Catalog({
             {exportBusy === 'building' && (
               <div style={{ padding:'12px 20px 0' }}>
                 <div style={{ fontSize:13, fontWeight:600, color:'#2B2419', marginBottom:6 }}>
-                  Building your spreadsheet… {exportPct > 0 ? `${exportPct}%` : ''}
+                  Building your {exportFormat === 'csv' ? 'sheet' : 'spreadsheet'}… {exportPct > 0 ? `${exportPct}%` : ''}
                 </div>
                 <div style={{ height:8, background:'#EFE7D8', borderRadius:99, overflow:'hidden' }}>
                   <div style={{ height:'100%', width:`${exportPct || 8}%`, background:'var(--pri)', borderRadius:99, transition:'width .2s ease' }} />
@@ -255,7 +302,11 @@ export default function Catalog({
                 style={{ padding:'10px 16px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:11, cursor:exportBusy?'default':'pointer', opacity: exportBusy ? 0.6 : 1 }}>Cancel</button>
               <button onClick={runExport} disabled={!!exportBusy || !exportPicked.size}
                 style={{ padding:'10px 18px', fontSize:14, fontWeight:800, fontFamily:'inherit', color:'#fff', background:(exportBusy || !exportPicked.size) ? '#B9AE9B' : 'var(--pri)', border:'none', borderRadius:11, cursor:(exportBusy || !exportPicked.size)?'default':'pointer' }}>
-                {exportBusy === 'building' ? 'Preparing…' : `Export ${pickedCount || ''} item${pickedCount === 1 ? '' : 's'}`}
+                {exportBusy === 'building'
+                  ? 'Preparing…'
+                  : exportFormat === 'pdf'
+                    ? 'Open print view'
+                    : `Export ${pickedCount || ''} item${pickedCount === 1 ? '' : 's'}`}
               </button>
             </div>
           </div>
@@ -267,10 +318,10 @@ export default function Catalog({
         <div style={{ maxWidth:1500, margin:'0 auto', padding:'14px 20px', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <img src="/assets/itland-logo.png" alt="iTLand" style={{ height:30, width:'auto' }} />
           <div style={{ flex:1 }} />
-          <button onClick={openExport} title="Export the in-stock catalogue to Excel"
+          <button onClick={openExport} title="Export the in-stock catalogue to Excel, Google Sheets or PDF"
             style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 14px', fontSize:14, fontWeight:700, fontFamily:'inherit', color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span className="hide-xs">Export to Excel</span>
+            <span className="hide-xs">Export catalogue</span>
           </button>
           <button onClick={onAdminClick} title="Admin Panel" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:38, height:38, padding:0, color:'#2B2419', background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:12, cursor:'pointer' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>

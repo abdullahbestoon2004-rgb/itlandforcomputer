@@ -1,4 +1,5 @@
 import { groupByBrand } from '../lib/brands.js';
+import { resolveOrigin, fetchInStockItems } from '../lib/export-request.js';
 
 /**
  * Brands available to export, with in-stock counts, for the export dialog.
@@ -12,16 +13,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
   try {
-    const r = await fetch(`${proto}://${host}/api/products`, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(25000),
-    });
-    if (!r.ok) throw new Error(`products endpoint returned ${r.status}`);
-    const data = await r.json();
-    const items = (data.products || data.items || []).filter(it => it.k ?? it.in_stock);
+    const items = await fetchInStockItems(resolveOrigin(req));
     const groups = groupByBrand(items);
     return res.status(200).json({ brands: groups.map(g => ({ brand: g.brand, count: g.items.length })) });
   } catch (e) {
