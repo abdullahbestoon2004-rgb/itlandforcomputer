@@ -9,6 +9,23 @@ async function api(path, opts) {
   return fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
 }
 
+const PRODUCTS_CACHE_KEY = 'itland_catalog_cache_v1';
+
+function getInitialCachedProducts() {
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read cached products from localStorage:', err);
+  }
+  return [];
+}
+
 export default function App() {
   const [screen, setScreen] = useState('login');     // 'login' | 'catalog' | 'detail' | 'admin-login' | 'admin'
   const [user, setUser] = useState('');
@@ -16,7 +33,7 @@ export default function App() {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(getInitialCachedProducts);
   const [query, setQuery] = useState('');
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
@@ -48,6 +65,11 @@ export default function App() {
         img: p.img || (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null),
       }));
       setItems(normalized);
+      try {
+        localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(normalized));
+      } catch (e) {
+        console.warn('Could not save products cache to localStorage:', e);
+      }
     } catch (err) {
       console.error('Failed to fetch products:', err);
     } finally {
@@ -59,7 +81,8 @@ export default function App() {
     const clientStr = localStorage.getItem('wholesale_client');
     if (clientStr) {
       setScreen('catalog');
-      loadItems(false);
+      const hasCached = items.length > 0;
+      loadItems(hasCached);
     }
   }, [loadItems]);
 
@@ -98,7 +121,7 @@ export default function App() {
         setError(false);
         setScreen('catalog');
         window.scrollTo(0, 0);
-        loadItems();
+        loadItems(items.length > 0);
       } else {
         setError(true);
       }

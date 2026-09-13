@@ -13,6 +13,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 
 // Load .env if present
 try {
@@ -79,7 +80,10 @@ function loadOverrides() {
   if (!fs.existsSync(OVERRIDES_FILE)) return {};
   try { return JSON.parse(fs.readFileSync(OVERRIDES_FILE, "utf8")); } catch { return {}; }
 }
-function saveOverrides(o) { fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(o, null, 2)); }
+function saveOverrides(o) {
+  fs.writeFileSync(OVERRIDES_FILE, JSON.stringify(o, null, 2));
+  invalidateItemsCache();
+}
 
 const FALLBACK_ITEMS = [
   {
@@ -168,7 +172,19 @@ const FALLBACK_ITEMS = [
   }
 ];
 
-function getItems() {
+let cachedItemsData = null;
+let lastCacheMtime = 0;
+let lastOverridesMtime = 0;
+let lastImageCount = 0;
+
+function invalidateItemsCache() {
+  cachedItemsData = null;
+  lastCacheMtime = 0;
+  lastOverridesMtime = 0;
+  lastImageCount = 0;
+}
+
+function computeItems() {
   const cache = getCache();
   const ov = loadOverrides();
   const usingCache = Boolean(cache.items && cache.items.length > 0);
@@ -213,7 +229,35 @@ function getItems() {
       img:             o.img      !== undefined ? o.img      : (autoImg || null),
     };
   });
-  return { updatedAt: cache.updatedAt || STARTED_AT, items, dataSource: usingCache ? "zoho" : "demo" };
+  const data = { updatedAt: cache.updatedAt || STARTED_AT, items, dataSource: usingCache ? "zoho" : "demo" };
+  const payload = JSON.stringify({ updatedAt: data.updatedAt, dataSource: data.dataSource, products: data.items, items: data.items });
+  const etag = '"' + crypto.createHash("sha1").update(payload).digest("hex") + '"';
+  data.payload = payload;
+  data.etag = etag;
+  return data;
+}
+
+function getItems() {
+  let cacheMtime = 0;
+  let ovMtime = 0;
+  try { if (fs.existsSync(CACHE_FILE)) cacheMtime = fs.statSync(CACHE_FILE).mtimeMs; } catch {}
+  try { if (fs.existsSync(OVERRIDES_FILE)) ovMtime = fs.statSync(OVERRIDES_FILE).mtimeMs; } catch {}
+
+  if (
+    cachedItemsData &&
+    cacheMtime === lastCacheMtime &&
+    ovMtime === lastOverridesMtime &&
+    imageFiles.length === lastImageCount
+  ) {
+    return cachedItemsData;
+  }
+
+  const data = computeItems();
+  cachedItemsData = data;
+  lastCacheMtime = cacheMtime;
+  lastOverridesMtime = ovMtime;
+  lastImageCount = imageFiles.length;
+  return data;
 }
 
 // ============ Zoho sync ============
@@ -537,6 +581,7 @@ async function syncNow() {
     }
 
     fs.writeFileSync(CACHE_FILE, JSON.stringify({ updatedAt: Date.now(), items }, null, 0));
+    invalidateItemsCache();
     console.log(`  cached ${items.length} items (${items.filter(i=>i.k).length} in stock, ${items.filter(i=>i.p != null).length} with wholesale price)`);
     lastSyncOk = Date.now();
     lastSyncError = null;
@@ -691,9 +736,28 @@ function getAdminSession(req) {
 }
 
 // ============ HTTP server ============
-function send(res, code, body, headers = {}) {
-  res.writeHead(code, Object.assign({ "Content-Type": "application/json" }, headers));
-  res.end(typeof body === "string" ? body : JSON.stringify(body));
+function send(res, code, body, headers = {}, req = null) {
+  const str = typeof body === "string" ? body : JSON.stringify(body);
+  const h = Object.assign({ "Content-Type": "application/json" }, headers);
+  const acceptEncoding = req ? (req.headers["accept-encoding"] || "") : "";
+
+  if (code >= 200 && code < 300 && str.length > 1024 && acceptEncoding.includes("gzip")) {
+    zlib.gzip(Buffer.from(str, "utf8"), (err, compressed) => {
+      if (!err && compressed) {
+        h["Content-Encoding"] = "gzip";
+        h["Content-Length"] = compressed.length;
+        res.writeHead(code, h);
+        res.end(compressed);
+        return;
+      }
+      res.writeHead(code, h);
+      res.end(str);
+    });
+    return;
+  }
+
+  res.writeHead(code, h);
+  res.end(str);
 }
 
 function serveStatic(res, filePath) {
@@ -703,7 +767,11 @@ function serveStatic(res, filePath) {
     ".svg":"image/svg+xml", ".ico":"image/x-icon" };
   fs.readFile(filePath, (err, data) => {
     if (err) { send(res, 404, "Not found"); return; }
-    res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+    const headers = { "Content-Type": types[ext] || "application/octet-stream" };
+    if (filePath.includes(path.sep + "assets" + path.sep) || [".webp", ".png", ".jpg", ".jpeg", ".svg", ".ico"].includes(ext)) {
+      headers["Cache-Control"] = "public, max-age=31536000, immutable";
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 }
@@ -861,15 +929,8 @@ const server = http.createServer(async (req, res) => {
   // ---- API: products / items ----
   if (pathn === "/api/products" || pathn === "/api/items") {
     const data = getItems();
-    const payload = JSON.stringify({ updatedAt: data.updatedAt, dataSource: data.dataSource, products: data.items, items: data.items });
-
-    // The catalog re-polls this endpoint every 60s and on every tab focus. The
-    // payload only changes when a Zoho sync or an admin edit lands, so tag it
-    // and let unchanged polls terminate as a 304 with no body. "no-cache" (not
-    // "no-store") is what makes that possible: the browser may keep the
-    // response but must revalidate it before reuse, so clients still see edits
-    // immediately.
-    const etag = '"' + crypto.createHash("sha1").update(payload).digest("hex") + '"';
+    const payload = data.payload || JSON.stringify({ updatedAt: data.updatedAt, dataSource: data.dataSource, products: data.items, items: data.items });
+    const etag = data.etag || ('"' + crypto.createHash("sha1").update(payload).digest("hex") + '"');
     const headers = { "Cache-Control": "no-cache", "ETag": etag };
 
     if (req.headers["if-none-match"] === etag) {
@@ -877,7 +938,7 @@ const server = http.createServer(async (req, res) => {
       res.end();
       return;
     }
-    send(res, 200, payload, headers);
+    send(res, 200, payload, headers, req);
     return;
   }
 
@@ -951,7 +1012,10 @@ const server = http.createServer(async (req, res) => {
     const m = imageData.match(/^data:image\/[a-zA-Z+]+;base64,(.+)$/);
     if (!m) { send(res, 400, { error: "invalid imageData" }); return; }
     fs.writeFileSync(path.join(IMAGE_DIR, safeName), Buffer.from(m[1], "base64"));
-    if (!imageFiles.includes(safeName)) imageFiles.push(safeName);
+    if (!imageFiles.includes(safeName)) {
+      imageFiles.push(safeName);
+      invalidateItemsCache();
+    }
     send(res, 200, { ok: true, img: `/assets/product_images/${safeName}` });
     return;
   }

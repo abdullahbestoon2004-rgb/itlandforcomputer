@@ -406,7 +406,27 @@ export default function Catalog({
             </div>
           </div>
 
-          {all.length > 0 ? (
+          {loading && items.length === 0 ? (
+            <div className="catalog-grid">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="card avail-card-skel" style={{ background:'#fff', border:'1.5px solid #E9DFC9', borderRadius:16, padding:0, display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 1px 2px rgba(23,19,14,.06)' }}>
+                  <div className="skel-shimmer" style={{ height:130, margin:'var(--cardpad)', marginBottom:0, borderRadius:10 }} />
+                  <div style={{ padding:'var(--cardpad)', display:'flex', flexDirection:'column', gap:10, flex:1 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div className="skel-shimmer" style={{ width:'35%', height:12 }} />
+                      <div className="skel-shimmer" style={{ width:'25%', height:16, borderRadius:999 }} />
+                    </div>
+                    <div className="skel-shimmer" style={{ width:'90%', height:16 }} />
+                    <div className="skel-shimmer" style={{ width:'60%', height:16 }} />
+                    <div style={{ marginTop:'auto', paddingTop:10, borderTop:'1px dashed #E9DFC9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div className="skel-shimmer" style={{ width:'30%', height:12 }} />
+                      <div className="skel-shimmer" style={{ width:'35%', height:20 }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : all.length > 0 ? (
             <>
               <div className="catalog-grid">
                 {vis.map(it => (

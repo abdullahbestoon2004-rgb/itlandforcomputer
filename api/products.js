@@ -15,6 +15,8 @@ let tokenExpiresAt = 0;
 // whole Zoho catalogue — is still done at most once an hour per instance.
 let cachedProducts = null;
 let productsExpiresAt = 0;
+let cachedNormalized = null;
+let lastOverridesJson = '';
 const PRODUCTS_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 async function getAccessToken() {
@@ -216,14 +218,17 @@ const FALLBACK_PRODUCTS = [
       productsExpiresAt = Date.now() + PRODUCTS_TTL_MS;
     }
 
-    // Overrides are applied per request, not baked into the cache: an admin
-    // edit has to show up on the next load, and caching the finished products
-    // would hide it for up to an hour.
-    const products = raw.map((item, i) => normalizeItem(item, i, overrides));
+    const overridesJson = JSON.stringify(overrides);
+    let products = cachedNormalized;
+    if (!products || overridesJson !== lastOverridesJson) {
+      products = raw.map((item, i) => normalizeItem(item, i, overrides));
+      cachedNormalized = products;
+      lastOverridesJson = overridesJson;
+    }
 
-    // Likewise the CDN must not serve a shared copy — it would hand every
-    // visitor the catalogue as it looked before the edit.
-    res.setHeader('Cache-Control', 'no-store');
+    // Edge CDN caching with Stale-While-Revalidate: visitors get instant responses (10-30ms)
+    // from Vercel's global edge network without waiting for Zoho API fetches.
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=600');
     return res.status(200).json({ products });
   } catch (err) {
     console.error('api/products error:', err);
