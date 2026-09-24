@@ -1,5 +1,5 @@
 import React from 'react';
-import { StockBadge, priceLabel } from './components.jsx';
+import { StockBadge, priceLabel, hasWholesalePrice } from './components.jsx';
 
 export default function Detail({ t, item, onBack }) {
   const stockColor = item.k ? '#1F9D57' : '#DE3A1E';
@@ -39,7 +39,7 @@ export default function Detail({ t, item, onBack }) {
             <div style={{ display:'flex', flexWrap:'wrap', gap:'14px 40px', padding:'20px 0', borderTop:'1.5px dashed #E9DFC9', borderBottom:'1.5px dashed #E9DFC9' }}>
               <div>
                 <div style={{ fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:'#8B8071', marginBottom:6 }}>{t.wholesalePrice}</div>
-                <div className="detail-price" dir="ltr" style={{ fontSize:38, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:'var(--pri)', lineHeight:1 }}>{priceLabel(item, t)}</div>
+                <div className="detail-price" dir="ltr" style={{ fontSize:!hasWholesalePrice(item)?22:38, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:!hasWholesalePrice(item)?'#DE3A1E':'var(--pri)', lineHeight:1.2 }}>{priceLabel(item, t)}</div>
               </div>
               {item.retail != null && (
                 <div>

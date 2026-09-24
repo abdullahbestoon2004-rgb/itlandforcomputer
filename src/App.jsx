@@ -57,7 +57,18 @@ export default function App() {
         barcode: p.barcode || p.brand || p.sku || p.s || '',
         brand: p.brand || '',
         category: p.category || '',
-        p: p.p !== undefined ? p.p : (p.wholesale_price !== undefined ? p.wholesale_price : null),
+        p: (() => {
+          const v = p.p !== undefined && p.p !== null ? p.p : p.wholesale_price;
+          if (v == null || v === '') return null;
+          const num = Number(v);
+          return !isNaN(num) && num > 0 ? num : null;
+        })(),
+        wholesale_price: (() => {
+          const v = p.p !== undefined && p.p !== null ? p.p : p.wholesale_price;
+          if (v == null || v === '') return null;
+          const num = Number(v);
+          return !isNaN(num) && num > 0 ? num : null;
+        })(),
         retail: p.retail !== undefined ? p.retail : (p.price !== undefined ? p.price : null),
         k: p.k !== undefined ? Boolean(p.k) : (p.in_stock !== undefined ? Boolean(p.in_stock) : (p.stock > 0)),
         stock: p.stock !== undefined ? Number(p.stock) : (p.stock_on_hand !== undefined ? Number(p.stock_on_hand) : 0),

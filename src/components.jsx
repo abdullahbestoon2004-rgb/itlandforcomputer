@@ -9,7 +9,18 @@ export function StockBadge({ inStock, t }) {
   );
 }
 
+export function hasWholesalePrice(it) {
+  if (!it) return false;
+  const val = it.p !== undefined && it.p !== null ? it.p : it.wholesale_price;
+  if (val == null || val === '') return false;
+  const num = Number(val);
+  return !isNaN(num) && num > 0;
+}
+
 export function priceLabel(it, t) {
-  if (it.p == null || it.p === '') return t.noWholesale;
-  return '$' + it.p;
+  if (!hasWholesalePrice(it)) {
+    return (t && t.noWholesale) ? t.noWholesale : 'Contact for the price';
+  }
+  const val = it.p !== undefined && it.p !== null ? it.p : it.wholesale_price;
+  return '$' + Number(val);
 }

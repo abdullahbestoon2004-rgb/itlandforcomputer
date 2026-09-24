@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { priceLabel } from './components.jsx';
+import { priceLabel, hasWholesalePrice } from './components.jsx';
 
 export default function AvailableCarousel({ items = [], loading = false, onOpen, t }) {
   const trackRef = useRef(null);
@@ -18,8 +18,10 @@ export default function AvailableCarousel({ items = [], loading = false, onOpen,
         if (a.img && !b.img) return -1;
         if (!a.img && b.img) return 1;
         // Items with wholesale price first
-        if (a.p != null && b.p == null) return -1;
-        if (a.p == null && b.p != null) return 1;
+        const hasA = hasWholesalePrice(a);
+        const hasB = hasWholesalePrice(b);
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
         // Higher stock on hand first
         return (b.stock || 0) - (a.stock || 0);
       })
@@ -247,7 +249,10 @@ export default function AvailableCarousel({ items = [], loading = false, onOpen,
                         <span
                           className="avail-price-value"
                           dir="ltr"
-                          style={{ color: it.p == null ? '#DE3A1E' : 'var(--pri)' }}
+                          style={{
+                            fontSize: !hasWholesalePrice(it) ? 12 : undefined,
+                            color: !hasWholesalePrice(it) ? '#DE3A1E' : 'var(--pri)'
+                          }}
                         >
                           {priceLabel(it, t)}
                         </span>

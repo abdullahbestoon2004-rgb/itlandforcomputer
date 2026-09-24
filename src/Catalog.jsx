@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { StockBadge, priceLabel } from './components.jsx';
+import { StockBadge, priceLabel, hasWholesalePrice } from './components.jsx';
 import { PAGE } from './i18n.js';
 import { matchesBrand, brandsPresent } from '../lib/brands.js';
 
@@ -452,7 +452,7 @@ export default function Catalog({
                       </div>
                       <div className="card-price-row" style={{ marginTop:'auto', paddingTop:8, borderTop:'1px dashed #E9DFC9', display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:8 }}>
                         <span className="card-price-label" style={{ fontSize:11, fontWeight:700, letterSpacing:'.1em', textTransform:'uppercase', color:'#8B8071' }}>{t.wholesalePrice}</span>
-                        <span className="card-price-val" dir="ltr" style={{ fontSize:it.p==null?13:20, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:it.p==null?'#DE3A1E':'var(--pri)' }}>{priceLabel(it, t)}</span>
+                        <span className="card-price-val" dir="ltr" style={{ fontSize:!hasWholesalePrice(it)?12.5:20, fontWeight:800, fontFamily:"'Space Mono',ui-monospace,monospace", color:!hasWholesalePrice(it)?'#DE3A1E':'var(--pri)' }}>{priceLabel(it, t)}</span>
                       </div>
                     </div>
                   </div>

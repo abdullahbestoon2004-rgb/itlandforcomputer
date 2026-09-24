@@ -72,7 +72,7 @@ try {
 // server, the local API server, and the Vercel functions score identically.
 // imageFiles is passed as a getter because the admin upload routes append to it
 // at runtime (see /api/admin/upload-image below).
-const { createMatcher } = require("./lib/product-matching.js");
+const { createMatcher, parseWholesalePriceFromText } = require("./lib/product-matching.js");
 const { findProductImage } = createMatcher(() => imageFiles);
 
 const OVERRIDES_FILE = path.join(__dirname, "overrides.json");
@@ -198,9 +198,14 @@ function computeItems() {
     const inStockVal = o.k !== undefined
       ? Boolean(o.k)
       : (o.stock !== undefined ? stockVal > 0 : (it.k !== undefined ? Boolean(it.k) : (it.in_stock !== undefined ? Boolean(it.in_stock) : stockVal > 0)));
+    const cleanPrice = (v) => {
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      return !isNaN(n) && n > 0 ? n : null;
+    };
     const wholesaleVal = o.p !== undefined
-      ? (o.p === null ? null : Number(o.p))
-      : (it.p != null ? Number(it.p) : (it.wholesale_price != null ? Number(it.wholesale_price) : null));
+      ? cleanPrice(o.p)
+      : (cleanPrice(it.p) ?? cleanPrice(it.wholesale_price));
     const retailVal = o.retail !== undefined
       ? (o.retail === null ? null : Number(o.retail))
       : (it.retail != null ? Number(it.retail) : (it.price != null ? Number(it.price) : null));
@@ -322,6 +327,7 @@ function loadPriceMap() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function extractWholesalePrice(it, priceMap, rawDesc, pricebookMap) {
+  if (!it) return null;
   const cfList = it.custom_fields || [];
 
   // 1. Explicit WHOLESALE_FIELD if configured
@@ -363,18 +369,10 @@ function extractWholesalePrice(it, priceMap, rawDesc, pricebookMap) {
 
   // 5. Embedded in description / purchase_description ("Office Price 15.5$" / "Wholesale Price 20$")
   const fullDesc = `${it.purchase_description || ''} ${it.description || ''} ${rawDesc || ''}`;
-  const m = fullDesc.match(/(?:Office\s+Price|Wholesale\s+Price|Wholesale|Office\s*Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
-  if (m) {
-    const v = parseFloat(m[1].replace(',', '.'));
-    if (!isNaN(v) && v > 0) return v;
-  }
+  const priceFromDesc = parseWholesalePriceFromText(fullDesc);
+  if (priceFromDesc != null) return priceFromDesc;
 
-  // 6. Purchase rate (Zoho Books cost / wholesale purchase rate)
-  if (it.purchase_rate != null && Number(it.purchase_rate) > 0) {
-    return Number(it.purchase_rate);
-  }
-
-  // 7. Zoho Pricebook rate if available
+  // 6. Zoho Pricebook rate if available
   const idKey = String(it.item_id || it.id || '');
   if (pricebookMap) {
     const pVal = pricebookMap[idKey] ?? (it.sku ? pricebookMap[it.sku] : null);
@@ -384,7 +382,7 @@ function extractWholesalePrice(it, priceMap, rawDesc, pricebookMap) {
     }
   }
 
-  // 8. Fallback to cached priceMap from wholesale-prices.json
+  // 7. Fallback to cached priceMap from wholesale-prices.json
   if (priceMap) {
     const mapped = priceMap[idKey] ?? (it.sku ? priceMap[it.sku] : null);
     if (mapped != null && mapped !== '') {
@@ -393,13 +391,8 @@ function extractWholesalePrice(it, priceMap, rawDesc, pricebookMap) {
     }
   }
 
-  // 9. Generic price pattern in description e.g. "Price 15$"
-  const m2 = fullDesc.match(/(?:Price)[^0-9]*(\d+(?:[.,]\d+)?)\s*\$?/i);
-  if (m2) {
-    const v = parseFloat(m2[1].replace(',', '.'));
-    if (!isNaN(v) && v > 0) return v;
-  }
-
+  // Never fall back to purchase_rate, retail price, or generic numbers in descriptions.
+  // Items without a valid wholesale price should return null so the UI displays "Contact for the price".
   return null;
 }
 
