@@ -11,13 +11,12 @@ let cachedToken = null;
 let tokenExpiresAt = 0;
 
 // Raw Zoho items, not finished products: overrides are applied per request so
-// an admin edit is visible immediately, while the expensive part — paging the
-// whole Zoho catalogue — is still done at most once an hour per instance.
+// an admin edit is visible immediately. Zoho catalogue paging is cached for 5 minutes.
 let cachedProducts = null;
 let productsExpiresAt = 0;
 let cachedNormalized = null;
 let lastOverridesJson = '';
-const PRODUCTS_TTL_MS = 60 * 60 * 1000; // 1 hour
+const PRODUCTS_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;

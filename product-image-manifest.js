@@ -19,6 +19,7 @@ export const LOCAL_IMAGES = [
   "Apple_A2119.webp",
   "DM_USB_Flash_Drive.webp",
   "Dell_P2422H.webp",
+  "Dell_Thunderbolt_4_Cable.webp",
   "Dell_WD19S_Dock.webp",
   "EZASHY_TURBG_64GB.webp",
   "Edifier_R101V.webp",

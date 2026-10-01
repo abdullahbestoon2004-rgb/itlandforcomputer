@@ -37,7 +37,7 @@ let tokenExpiresAt = 0;
 
 let cachedProducts = null;
 let productsExpiresAt = 0;
-const PRODUCTS_TTL_MS = 60 * 60 * 1000;
+const PRODUCTS_TTL_MS = 5 * 60 * 1000;
 
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
