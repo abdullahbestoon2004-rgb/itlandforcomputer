@@ -52,6 +52,17 @@ const mustBeNull = [
   'Logitech G Pro X Superlight 2 DEX Magenta',
   // The port generation must still match even though it is not a model.
   'Dell Thunderbolt 3 Cable',
+  // A Logitech part number's prefix is a product family, not a model: 920- is
+  // every keyboard, and it was putting the C920 webcam or G920 wheel on them.
+  'Logitech MK220 Wireless Combo 920-003168',
+  'Logitech G413 SE Mechanical Gaming Keyboard 920-010437',
+  'Logitech Wireless Speakerphone 950-000012',
+  // A number after another product line is that line's model, not the image's.
+  'Logitech Brio 505 Business Webcam',
+  'Logitech Zone 750 USB Headset',
+  'Logitech Zone Vibe 125 Wireless Headset',
+  'Jabra Evolve2 40 SE USB-A MS Stereo',
+  'Logitech G502 X Plus Wireless Gaming Mouse',
 ];
 report('no-art products return null', mustBeNull
   .map(n => [n, match(n)]).filter(([, g]) => g)
@@ -98,6 +109,11 @@ const confusable = [
   ['Logitech MK295 Silent Wireless Combo',             'Logitech_MK295.webp'],
   ['Logitech H390 USB Headset',                        'Logitech_H390.webp'],
   ['Logitech K400 Plus Wireless Touch Keyboard',       'Logitech_K400_Plus_Touch.webp'],
+  // Feature words in a filename are not required in the listing.
+  ['Logitech K400 Plus Wireless Keyboard 920-007145',  'Logitech_K400_Plus_Touch.webp'],
+  ['Logitech C920s Pro HD Webcam',                     'Logitech_C920S_Pro_Privacy_Shutter.webp'],
+  // The Blackwire line's codes carry a C, so "Blackwire 5220" is the C5220.
+  ['Poly Blackwire 5220 Stereo USB-A',                 'Poly_C5220.webp'],
   // Same product, different marketing name / colourway — should still match.
   ['Logitech Z150 Stereo Speakers Midnight Black',     'Logitech_Z150.webp'],
   ['Logitech M350s Pebble Mouse 2',                    'Logitech_Pebble_Mouse_2.webp'],
@@ -110,6 +126,7 @@ report('confusable models', confusable
 const noise = [
   n => n, n => n.toUpperCase(), n => `${n} Black`, n => `${n} Wireless`,
   n => `${n} - Office Price 45 $`, n => `${n} 097855174574`,
+  n => `${n} Gaming 920-010437`,
   n => `${n} for Business, 1 Year Warranty`,
 ];
 const sweepBad = [];
