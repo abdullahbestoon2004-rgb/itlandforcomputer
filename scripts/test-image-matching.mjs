@@ -46,6 +46,12 @@ const mustBeNull = [
   'Onten OTN-7595 HDMI Splitter',
   'Elgato Wave 3 USB Microphone',
   'Lention CB-C36 USB C Hub',
+  // Catalogue names that were showing another product's picture: the
+  // Thunderbolt 4 cable, and the plain Superlight 2.
+  'Dell WD22TB4 Thunderbolt 4 Docking Station',
+  'Logitech G Pro X Superlight 2 DEX Magenta',
+  // The port generation must still match even though it is not a model.
+  'Dell Thunderbolt 3 Cable',
 ];
 report('no-art products return null', mustBeNull
   .map(n => [n, match(n)]).filter(([, g]) => g)
@@ -68,7 +74,6 @@ const confusable = [
   ['Logitech C925e Business Webcam',                   'Logitech_C925e.webp'],
   ['Logitech G Pro X Superlight Wireless Mouse',       'Logitech_G_Pro_X_Superlight.webp'],
   ['Logitech G Pro X Superlight 2 Wireless',           'Logitech_G_Pro_X_Superlight_2.webp'],
-  ['Logitech G Pro X Superlight 2 DEX Magenta',        'Logitech_G_Pro_X_Superlight_2_DEX.webp'],
   ['Jabra Speak 510 Speakerphone',                     'Jabra_Speak_510.webp'],
   ['Jabra Speak 510 UC Speakerphone MS',               'Jabra_Speak_510_UC.webp'],
   ['Jabra Evolve2 65 Stereo USB-A MS',                 'Jabra_Evolve2_65.webp'],
