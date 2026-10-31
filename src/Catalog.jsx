@@ -175,7 +175,11 @@ export default function Catalog({
       if (inStockOnly && !it.k) return false;
       if (!matchesSearch(it, query)) return false;
       return true;
-    });
+    })
+      // Most stock on hand first, so the items we can ship in volume lead the
+      // grid. The sort is stable, so items on equal stock keep the order the
+      // server sent them in.
+      .sort((a, b) => (b.stock || 0) - (a.stock || 0));
   }, [items, query, inStockOnly, brand]);
 
   // Category counts from pre-filtered list
